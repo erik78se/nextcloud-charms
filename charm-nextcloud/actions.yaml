@@ -1,0 +1,29 @@
+# Copyright 2020 Erik Lönroth
+# See LICENSE file for licensing details.
+#
+add-trusted-domain:
+  description: 'Adds a trusted domain by invoking <occ config:system:set trusted_domain>.'
+  params:
+    index:
+      description: 'nextcloud trusted_domains array'
+      type: integer
+    domain:
+      decription: 'The domain --value=<example.com>'
+      type: string
+  required: [ index, domain ]
+
+add-missing-indices:
+  description: 'Runs occ db:add-missing-indices'
+  params: {}
+
+convert-filecache-bigint:
+  description: 'Put site in maintenance while running occ db:convert-filecache-bigint'
+  params: {}
+
+maintenance:
+  description: 'Runs occ maintenance:mode --on/off'
+  params:
+    enable:
+      description: "Either true or false"
+      type: boolean
+  required: [ enable ]

@@ -1,0 +1,5 @@
+ops
+ops-lib-pgsql
+xtarfile
+requests
+jinja2

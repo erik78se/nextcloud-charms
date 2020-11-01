@@ -1,0 +1,41 @@
+# Copyright 2020 Erik Lönroth
+# See LICENSE file for licensing details.
+#
+# This is only an example, and you should edit to suit your needs.
+# If you don't need config, you can remove the file entirely.
+options:
+  admin-username:
+    type: string
+    default: admin
+    description: >
+      The NextCloud admin user, only used at deploy, change with occ or web gui.
+  admin-password:
+    type: string
+    default: mypassword
+    description: >
+      The NextCloud admin password, only used at deploy, change with occ or web gui
+  fqdn:
+    type: string
+    default: ""
+    description: >
+      FQDN of Nextcloud instance
+  php_max_file_uploads:
+    type: int
+    default: 20
+    description: >
+      Setting for php
+  php_upload_max_filesize:
+    type: string
+    default: '512M'
+    description: >
+      Setting for php
+  php_post_max_size:
+    type: string
+    default: '512M'
+    description: >
+      Setting for php
+  php_memory_limit:
+    type: string
+    default: '1G'
+    description: >
+      Setting for php
