@@ -19,7 +19,8 @@ from io import BytesIO
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
-    MaintenanceStatus
+    MaintenanceStatus,
+    WaitingStatus
 )
 
 from utils import open_port
@@ -38,14 +39,18 @@ class NextcloudCharm(CharmBase):
     def __init__(self, *args):
         super().__init__(*args)
 
-        self._stored.set_default(version=0)
-        
         self._stored.set_default(data_dir='/var/www/nextcloud/data/')
 
         self._stored.set_default(nextcloud_fetched=False)
 
+        self._stored.set_default(nextcloud_initialized=False)
+
         self._stored.set_default(database_available=False)
-        
+
+        self._stored.set_default(apache_configured=False)
+
+        self._stored.set_default(php_configured=False)
+
         self.framework.observe(self.on.install, self._on_install)
         
         self.framework.observe(self.on.config_changed, self._on_config_changed)
@@ -59,6 +64,11 @@ class NextcloudCharm(CharmBase):
         self.framework.observe(self.db.on.master_changed, self._on_master_changed)
 
         self.framework.observe(self.db.on.standby_changed, self._on_standby_changed)
+
+        self.framework.observe(self.on.start, self._on_start)
+
+        self.framework.observe(self.on.update_status, self._on_update_status)
+
         
         ### ACTIONS ###
         self.framework.observe(self.on.add_trusted_domain_action,
@@ -79,24 +89,22 @@ class NextcloudCharm(CharmBase):
         if not self._stored.nextcloud_fetched:
             # Fetch nextcloud to /var/www/
             self._fetch_nextcloud()
-
+        
+        
+    def _on_config_changed(self, event):
+        """
+        Any configuration change trigger a complete reconfigure of
+        the php and apache and also a restart of apache.
+        :param event:
+        :return:
+        """
         self._config_apache2()
         
         self._config_php()
 
-        if not self._stored.database_available:
-            self.unit.status = BlockedStatus("Missing postgresql relation data.")
-            event.defer()
-            return
-        else:
-            self.unit.status = MaintenanceStatus("Database available.")    
-            
-        if not self._stored.nextcloud_initialized:
-            self._init_nextcloud()
-        
-        
-    def _on_config_changed(self, _):
-            logger.debug("version: %r", self._stored.version)
+        subprocess.check_call(['systemctl', 'restart', 'apache2.service'])
+
+        self._on_update_status(event)
 
     
     def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
@@ -121,9 +129,7 @@ class NextcloudCharm(CharmBase):
         # most charms will find it easier to just handle the Changed
         # events. event.master is None if the master database is not
         # available, or a pgsql.ConnectionString instance.
-        print("============master============")
-        print(str(event.master))
-        
+            
         self._stored.db_conn_str = None if event.master is None else event.master.conn_str
         self._stored.db_uri = None if event.master is None else event.master.uri
         self._stored.dbname = None if event.master is None else event.master.dbname
@@ -132,7 +138,7 @@ class NextcloudCharm(CharmBase):
         self._stored.dbhost = None if event.master is None else event.master.host
         self._stored.dbport = None if event.master is None else event.master.port
         self._stored.dbtype = None if event.master is None else 'pgsql'
-
+        self.unit.status = MaintenanceStatus("Database available.")
         self._stored.database_available = True
         
         # You probably want to emit an event here or call a setup routine to
@@ -140,6 +146,7 @@ class NextcloudCharm(CharmBase):
         # are available.
 
     def _on_standby_changed(self, event: pgsql.StandbyChangedEvent):
+
         if event.database != 'nextcloud':
             # Leader has not yet set requirements. Wait until next event,
             # or risk connecting to an incorrect database.
@@ -153,6 +160,25 @@ class NextcloudCharm(CharmBase):
         # databases are available.
         self._stored.db_ro_uris = [c.uri for c in event.standbys]
 
+    def _on_start(self, event):
+        # defer() if database is not available.
+        if not self._stored.nextcloud_initialized:
+
+            self._init_nextcloud()
+
+            self._stored.nextcloud_initialized = True
+
+        try:
+            
+            subprocess.check_call(['systemctl','restart','apache2.service'])
+
+            self._on_update_status(event)
+            
+        except subprocess.CalledProcessError as e:
+
+            print(e)
+
+            sys.exit(-1)
 
     ## ACTIONS
 
@@ -248,7 +274,7 @@ class NextcloudCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Nexcloud sources installed")
 
             self._stored.nextcloud_fetched = True
-            
+
         except subprocess.CalledProcessError as e:
             print(e)
             sys.exit(-1)
@@ -305,10 +331,16 @@ class NextcloudCharm(CharmBase):
         
         subprocess.check_call(['phpenmod', 'nextcloud'])
 
-        # Restart required after phpenmod config changes.
+        self._stored.php_configured = True
+
+        self.unit.status = MaintenanceStatus("php config complete.")
+
 
     def _init_nextcloud(self):
-            
+        """
+        Initializes nextcloud via the nextcloud occ interface.
+        :return:
+        """
         self.unit.status = MaintenanceStatus("Begin initializing nextcloud...")
 
         ctx = {'dbtype': self._stored.dbtype,
@@ -328,20 +360,20 @@ class NextcloudCharm(CharmBase):
                       "--admin-pass {adminpassword} "
                       "--data-dir {datadir} ").format(**ctx)
 
-        with os.chdir('/var/www/nextcloud'):
+        subprocess.call(("sudo chown -R www-data:www-data /var/www/nextcloud").split(),
+                            cwd='/var/www/nextcloud')
 
-            subprocess.call(("sudo chown -R www-data:www-data .").split())
-
-            subprocess.call(nextcloud_init.split())
-
+        subprocess.call(nextcloud_init.split(),cwd='/var/www/nextcloud')
+            
             #TODO: This is wrong and will also replace other values in config.php
             #BUG - perhaps add a config here with trusted_domains.
-            Path('/var/www/nextcloud/config/config.php').write_text(
-                Path('/var/www/nextcloud/config/config.php').open().read().replace(
-                    "localhost", self.config.get('fqdn') or unit_public_ip()))
+            # self.unit.ingress_address
+        Path('/var/www/nextcloud/config/config.php').write_text(
+            Path('/var/www/nextcloud/config/config.php').open().read().replace(
+                "localhost", self.config.get('fqdn') or "127.0.0.1" ))
 
 
-        open_port(port='80')
+        open_port('80')
 
         self.unit.status = MaintenanceStatus("Nextcloud init complete.")
 
@@ -355,7 +387,8 @@ class NextcloudCharm(CharmBase):
         ctx = {}
 
         template = Environment(
-            loader=FileSystemLoader(Path( self.charm_dir / 'templates' ))).get_template('nextcloud.conf.j2')
+            loader=FileSystemLoader(Path( self.charm_dir / 'templates' ))
+                                ).get_template('nextcloud.conf.j2')
 
         target = Path('/etc/apache2/sites-available/nextcloud.conf')
 
@@ -366,9 +399,23 @@ class NextcloudCharm(CharmBase):
 
         subprocess.check_call(['a2ensite', 'nextcloud'])
 
+        self._stored.apache_configured = True
+
         self.unit.status = MaintenanceStatus("apache2 config complete.")
 
+    def _on_update_status(self, event):
+        """
+        Evaluate the internal state to report on status.
+        """
 
+        if ( self._stored.nextcloud_fetched \
+                and self._stored.nextcloud_initialized \
+                and self._stored.database_available \
+                and self._stored.apache_configured \
+                and self._stored.php_configured):
+            self.unit.status = ActiveStatus("Ready")
+        else:
+            self.unit.status = WaitingStatus("Completing setup...")
 
         
 if __name__ == "__main__":
