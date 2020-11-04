@@ -138,8 +138,13 @@ class NextcloudCharm(CharmBase):
         self._stored.dbhost = None if event.master is None else event.master.host
         self._stored.dbport = None if event.master is None else event.master.port
         self._stored.dbtype = None if event.master is None else 'pgsql'
-        self.unit.status = MaintenanceStatus("Database available.")
-        self._stored.database_available = True
+
+        if not self._stored.dbtype:
+            self.unit.status = MaintenanceStatus("Database not available.")
+            self._stored.database_available = False
+        else:
+            self.unit.status = MaintenanceStatus("Database available.")
+            self._stored.database_available = True
         
         # You probably want to emit an event here or call a setup routine to
         # do something useful with the libpq connection string or URI now they
@@ -161,15 +166,22 @@ class NextcloudCharm(CharmBase):
         self._stored.db_ro_uris = [c.uri for c in event.standbys]
 
     def _on_start(self, event):
-        # defer() if database is not available.
+
+        if not self._stored.database_available:
+
+            event.defer()
+
+            return
+
         if not self._stored.nextcloud_initialized:
 
-            self._init_nextcloud()
+            #TODO: Does this work or ?
+            public_address = event.relation.data[self.unit]['public-address']
 
-            self._stored.nextcloud_initialized = True
+            self._init_nextcloud(trusted_domain=public_address)
 
         try:
-            
+            #TODO: Possibly not needed to restart apache2
             subprocess.check_call(['systemctl','restart','apache2.service'])
 
             self._on_update_status(event)
@@ -336,7 +348,7 @@ class NextcloudCharm(CharmBase):
         self.unit.status = MaintenanceStatus("php config complete.")
 
 
-    def _init_nextcloud(self):
+    def _init_nextcloud(self, trusted_domain=None):
         """
         Initializes nextcloud via the nextcloud occ interface.
         :return:
@@ -349,22 +361,27 @@ class NextcloudCharm(CharmBase):
                'dbpass': self._stored.dbpass,
                'dbuser': self._stored.dbuser,
                'adminpassword': self.config.get('admin-password'),
-               'adminuser': self.config.get('admin-user'),
+               'adminusername': self.config.get('admin-username'),
                'datadir': '/var/www/nextcloud/data' 
                }
         
         nextcloud_init = ("sudo -u www-data /usr/bin/php occ maintenance:install "
                       "--database {dbtype} --database-name {dbname} "
                       "--database-host {dbhost} --database-pass {dbpass} "
-                      "--database-user {dbuser} --admin-user {adminuser} "
+                      "--database-user {dbuser} --admin-user {adminusername} "
                       "--admin-pass {adminpassword} "
                       "--data-dir {datadir} ").format(**ctx)
 
-        subprocess.call(("sudo chown -R www-data:www-data /var/www/nextcloud").split(),
-                            cwd='/var/www/nextcloud')
-
         subprocess.call(nextcloud_init.split(),cwd='/var/www/nextcloud')
-            
+
+        add_trusted_domain = ("sudo -u www-data php /var/www/nextcloud/occ config:system:set "
+                              "trusted_domains 1 "
+                              " --value=${trusted_domain} ").format(**ctx)
+
+        subprocess.call(add_trusted_domain.split(),cwd='/var/www/nextcloud')
+
+        subprocess.call(("sudo chown -R www-data:www-data /var/www/nextcloud").split(),
+                        cwd='/var/www/nextcloud')
             #TODO: This is wrong and will also replace other values in config.php
             #BUG - perhaps add a config here with trusted_domains.
             # self.unit.ingress_address
@@ -372,8 +389,9 @@ class NextcloudCharm(CharmBase):
             Path('/var/www/nextcloud/config/config.php').open().read().replace(
                 "localhost", self.config.get('fqdn') or "127.0.0.1" ))
 
-
         open_port('80')
+
+        self._stored.nextcloud_initialized = True
 
         self.unit.status = MaintenanceStatus("Nextcloud init complete.")
 
@@ -395,8 +413,12 @@ class NextcloudCharm(CharmBase):
         target.write_text( template.render( ctx ) )
         # Enable required modules.        
         for module in ['rewrite', 'headers', 'env', 'dir', 'mime']:
-            subprocess.call(['a2enmod', module])                
+            subprocess.call(['a2enmod', module])
 
+        # Disable default site
+        subprocess.check_call(['a2dissite', '000-default'])
+
+        # Enable nextcloud site (wich will be default)
         subprocess.check_call(['a2ensite', 'nextcloud'])
 
         self._stored.apache_configured = True
