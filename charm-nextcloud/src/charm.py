@@ -69,6 +69,11 @@ class NextcloudCharm(CharmBase):
 
         self.framework.observe(self.on.update_status, self._on_update_status)
 
+        # Perhaps act on the database_available instead of master_available?
+        
+        # unit-nextcloud-1: 11:52:26 INFO unit.nextcloud/1.juju-log db:2: emitting database_available event for relation 2
+        # unit-nextcloud-1: 11:52:26 INFO unit.nextcloud/1.juju-log db:2: emitting database_changed event for relation 2
+
         
         ### ACTIONS ###
         self.framework.observe(self.on.add_trusted_domain_action,
@@ -140,10 +145,10 @@ class NextcloudCharm(CharmBase):
         self._stored.dbtype = None if event.master is None else 'pgsql'
 
         if not self._stored.dbtype:
-            self.unit.status = MaintenanceStatus("Database not available.")
+            #self.unit.status = MaintenanceStatus("Database not available.")
             self._stored.database_available = False
         else:
-            self.unit.status = MaintenanceStatus("Database available.")
+            #self.unit.status = MaintenanceStatus("Database available.")
             self._stored.database_available = True
         
         # You probably want to emit an event here or call a setup routine to
@@ -176,16 +181,30 @@ class NextcloudCharm(CharmBase):
         if not self._stored.nextcloud_initialized:
 
             #TODO: Does this work or ?
-            public_address = event.relation.data[self.unit]['public-address']
+            # public_address = event.relation.data[self.unit]['public-address']
 
+            try:
+                public_address = subprocess.check_output("unit-get public-address",
+                                                         shell=True,universal_newlines=True).strip()
+            
+            except subprocess.CalledProcessError as e:
+
+                print(e)
+
+                sys.exit(-1)
+            
+            # public_address = self.model.get_binding("application-internal-peer-name").network.bind_address
+            
             self._init_nextcloud(trusted_domain=public_address)
+
+            self.unit.set_workload_version("VERSION")
 
         try:
             #TODO: Possibly not needed to restart apache2
             subprocess.check_call(['systemctl','restart','apache2.service'])
 
             self._on_update_status(event)
-            
+           
         except subprocess.CalledProcessError as e:
 
             print(e)
@@ -266,7 +285,7 @@ class NextcloudCharm(CharmBase):
         Fetch and Install nextcloud from internet
         Sources are about 100M.
         """
-        self.unit.status = MaintenanceStatus("Begin fetching nextcloud sources.")
+        self.unit.status = MaintenanceStatus("Begin fetching sources.")
 
         import requests
         import tarfile
@@ -283,7 +302,7 @@ class NextcloudCharm(CharmBase):
             with tarfile.open( fileobj=BytesIO( response.content ), mode='r:bz2' ) as tfile:            
                 tfile.extractall( path=dst )
 
-            self.unit.status = MaintenanceStatus("Nexcloud sources installed")
+            self.unit.status = MaintenanceStatus("Sources installed")
 
             self._stored.nextcloud_fetched = True
 
@@ -376,7 +395,7 @@ class NextcloudCharm(CharmBase):
 
         add_trusted_domain = ("sudo -u www-data php /var/www/nextcloud/occ config:system:set "
                               "trusted_domains 1 "
-                              " --value=${trusted_domain} ").format(**ctx)
+                              " --value={} ").format(trusted_domain)
 
         subprocess.call(add_trusted_domain.split(),cwd='/var/www/nextcloud')
 
