@@ -7,7 +7,12 @@ summary: |
   Docs goes here
 series: [bionic, focal]
 
+
+provides:
+  website:
+    interface: http
+
 requires:
   db:
     interface: pgsql
-    limit: 1
+

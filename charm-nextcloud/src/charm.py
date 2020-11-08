@@ -8,6 +8,7 @@ import sys
 import os
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
+import json
 
 from ops.charm import CharmBase
 from ops.main import main
@@ -60,19 +61,12 @@ class NextcloudCharm(CharmBase):
         self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation in metadata.yaml
 
         self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
-        
-        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
 
-        self.framework.observe(self.db.on.standby_changed, self._on_standby_changed)
+        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
 
         self.framework.observe(self.on.start, self._on_start)
 
         self.framework.observe(self.on.update_status, self._on_update_status)
-
-        # Perhaps act on the database_available instead of master_available?
-        
-        # unit-nextcloud-1: 11:52:26 INFO unit.nextcloud/1.juju-log db:2: emitting database_available event for relation 2
-        # unit-nextcloud-1: 11:52:26 INFO unit.nextcloud/1.juju-log db:2: emitting database_changed event for relation 2
 
         
         ### ACTIONS ###
@@ -111,7 +105,7 @@ class NextcloudCharm(CharmBase):
 
         self._on_update_status(event)
 
-    
+        
     def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
@@ -134,7 +128,9 @@ class NextcloudCharm(CharmBase):
         # most charms will find it easier to just handle the Changed
         # events. event.master is None if the master database is not
         # available, or a pgsql.ConnectionString instance.
-            
+        
+        logger.debug("=== Database master_changed event ===")
+        
         self._stored.db_conn_str = None if event.master is None else event.master.conn_str
         self._stored.db_uri = None if event.master is None else event.master.uri
         self._stored.dbname = None if event.master is None else event.master.dbname
@@ -144,69 +140,45 @@ class NextcloudCharm(CharmBase):
         self._stored.dbport = None if event.master is None else event.master.port
         self._stored.dbtype = None if event.master is None else 'pgsql'
 
-        if not self._stored.dbtype:
-            #self.unit.status = MaintenanceStatus("Database not available.")
-            self._stored.database_available = False
-        else:
-            #self.unit.status = MaintenanceStatus("Database available.")
+        if event.master and event.database == 'nextcloud':
+
             self._stored.database_available = True
-        
-        # You probably want to emit an event here or call a setup routine to
-        # do something useful with the libpq connection string or URI now they
-        # are available.
 
-    def _on_standby_changed(self, event: pgsql.StandbyChangedEvent):
+            if not self._stored.nextcloud_initialized:
 
-        if event.database != 'nextcloud':
-            # Leader has not yet set requirements. Wait until next event,
-            # or risk connecting to an incorrect database.
-            return
+                self._set_directory_permissions()
 
-        # Charms needing access to the hot standby databases can get
-        # their connection details here. Applications can scale out
-        # horizontally if they can make use of the read only hot
-        # standby replica databases, rather than only use the single
-        # master. event.stanbys will be an empty list if no hot standby
-        # databases are available.
-        self._stored.db_ro_uris = [c.uri for c in event.standbys]
+                self._init_nextcloud()
+            
+                self._add_initial_trusted_domain()
 
+                installed = self.get_nextcloud_status()['installed']
+
+                if installed:
+
+                    logger.debug("===== Nextcloud install_status: {}====".format(installed))
+
+                    self._stored.nextcloud_initialized = True                    
+
+            
     def _on_start(self, event):
-
-        if not self._stored.database_available:
-
-            event.defer()
-
-            return
 
         if not self._stored.nextcloud_initialized:
 
-            #TODO: Does this work or ?
-            # public_address = event.relation.data[self.unit]['public-address']
-
-            try:
-                public_address = subprocess.check_output("unit-get public-address",
-                                                         shell=True,universal_newlines=True).strip()
+            event.defer()
             
-            except subprocess.CalledProcessError as e:
-
-                print(e)
-
-                sys.exit(-1)
-            
-            # public_address = self.model.get_binding("application-internal-peer-name").network.bind_address
-            
-            self._init_nextcloud(trusted_domain=public_address)
-
-            self.unit.set_workload_version("VERSION")
+            return
 
         try:
-            #TODO: Possibly not needed to restart apache2
-            subprocess.check_call(['systemctl','restart','apache2.service'])
 
+            subprocess.check_call(['systemctl','restart','apache2.service'])
+            
             self._on_update_status(event)
+
+            open_port('80')
            
         except subprocess.CalledProcessError as e:
-
+            
             print(e)
 
             sys.exit(-1)
@@ -295,6 +267,7 @@ class NextcloudCharm(CharmBase):
         checksum = '7b67e709006230f90f95727f9fa92e8c73a9e93458b22103293120f9cb50fd72'
 
         try:
+            
             response = requests.get(source, allow_redirects=True, stream=True)
             
             dst=Path('/var/www/')
@@ -367,7 +340,7 @@ class NextcloudCharm(CharmBase):
         self.unit.status = MaintenanceStatus("php config complete.")
 
 
-    def _init_nextcloud(self, trusted_domain=None):
+    def _init_nextcloud(self):
         """
         Initializes nextcloud via the nextcloud occ interface.
         :return:
@@ -393,24 +366,33 @@ class NextcloudCharm(CharmBase):
 
         subprocess.call(nextcloud_init.split(),cwd='/var/www/nextcloud')
 
+        
+    def _add_initial_trusted_domain(self):
+        
+        trusted_domain = self.model.get_binding('website').network.ingress_address
+
+        # Adds the ingress_address to trusted domains
         add_trusted_domain = ("sudo -u www-data php /var/www/nextcloud/occ config:system:set "
                               "trusted_domains 1 "
                               " --value={} ").format(trusted_domain)
 
         subprocess.call(add_trusted_domain.split(),cwd='/var/www/nextcloud')
 
+
+    def _set_directory_permissions(self):
+        
         subprocess.call(("sudo chown -R www-data:www-data /var/www/nextcloud").split(),
                         cwd='/var/www/nextcloud')
-            #TODO: This is wrong and will also replace other values in config.php
-            #BUG - perhaps add a config here with trusted_domains.
-            # self.unit.ingress_address
+
+
+    def _patch_config(self):
+
+        #TODO: This is wrong and will also replace other values in config.php
+        #BUG - perhaps add a config here with trusted_domains.
+        # self.unit.ingress_address
         Path('/var/www/nextcloud/config/config.php').write_text(
             Path('/var/www/nextcloud/config/config.php').open().read().replace(
                 "localhost", self.config.get('fqdn') or "127.0.0.1" ))
-
-        open_port('80')
-
-        self._stored.nextcloud_initialized = True
 
         self.unit.status = MaintenanceStatus("Nextcloud init complete.")
 
@@ -421,14 +403,14 @@ class NextcloudCharm(CharmBase):
         """
         self.unit.status = MaintenanceStatus("Begin config apache2.")
 
-        ctx = {}
-
         template = Environment(
             loader=FileSystemLoader(Path( self.charm_dir / 'templates' ))
                                 ).get_template('nextcloud.conf.j2')
 
         target = Path('/etc/apache2/sites-available/nextcloud.conf')
 
+        ctx = {}
+        
         target.write_text( template.render( ctx ) )
         # Enable required modules.        
         for module in ['rewrite', 'headers', 'env', 'dir', 'mime']:
@@ -454,10 +436,42 @@ class NextcloudCharm(CharmBase):
                 and self._stored.database_available \
                 and self._stored.apache_configured \
                 and self._stored.php_configured):
-            self.unit.status = ActiveStatus("Ready")
-        else:
-            self.unit.status = WaitingStatus("Completing setup...")
 
+            self.unit.status = ActiveStatus("Ready")
+
+            self.unit.set_workload_version(self.get_nextcloud_status()['version'])            
+        elif not self._stored.database_available:
+
+            self.unit.status = BlockedStatus("No database.")
+
+        else:
+
+            self.unit.status = WaitingStatus("Not Ready...")
+
+
+    def get_nextcloud_status(self) -> dict:
+        """
+        Return dict with nextcloud status.
+        """
+        ns = "sudo -u www-data /usr/bin/php occ status --output=json --no-warnings"
+
+        try:
+            output = subprocess.run( ns.split(),
+                         stdout=subprocess.PIPE,
+                         cwd='/var/www/nextcloud',
+                         universal_newlines=True).stdout
+
+            returndict = json.loads(output)
+
+            logger.debug(returndict)
+            
+        except subprocess.CalledProcessError as e:
+
+            print(e)
+
+            sys.exit(-1)
+
+        return returndict
         
 if __name__ == "__main__":
     main(NextcloudCharm)
