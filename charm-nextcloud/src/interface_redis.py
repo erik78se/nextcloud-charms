@@ -48,7 +48,7 @@ class RedisClient(Object):
         
         
         password = event_unit_data.get('password')
-        host = event_unit_data.get('host')
+        host = event_unit_data.get('hostname')
         port = event_unit_data.get('port')
 
         if (host and port):

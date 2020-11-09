@@ -24,6 +24,8 @@ from ops.model import (
     WaitingStatus
 )
 
+import interface_redis
+
 from utils import open_port
 
 logger = logging.getLogger(__name__)
@@ -63,6 +65,16 @@ class NextcloudCharm(CharmBase):
         self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
 
         self.framework.observe(self.db.on.master_changed, self._on_master_changed)
+
+        ### REDIS
+
+        self._stored.set_default(redis_info=dict())
+
+        self._redis = interface_redis.RedisClient(self, "redis")
+
+        self.framework.observe(self._redis.on.redis_available, self._on_redis_available)
+
+        ##########
 
         self.framework.observe(self.on.start, self._on_start)
 
@@ -472,6 +484,26 @@ class NextcloudCharm(CharmBase):
             sys.exit(-1)
 
         return returndict
-        
+
+    def set_redis_info(self, info: dict):
+
+        self._stored.redis_info = info
+
+    def _on_redis_available(self,event):
+
+        logger.debug("=== _on_redis_available ===")
+
+        logger.debug(self._stored.redis_info)
+
+        template = Environment(
+            loader=FileSystemLoader(Path(self.charm_dir / 'templates'))
+        ).get_template('redis.php.j2')
+
+        target = Path('/var/www/nextcloud/config/redis.conf')
+
+        ctx = self._stored.redis_info
+
+        target.write_text(template.render(ctx))
+
 if __name__ == "__main__":
     main(NextcloudCharm)

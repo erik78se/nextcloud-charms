@@ -1,4 +1,6 @@
 .idea/
 charm-nextcloud/build/
 nextcloud.charm
-
+*.pyc
+*~
+*build*
