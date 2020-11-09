@@ -497,9 +497,9 @@ class NextcloudCharm(CharmBase):
 
         template = Environment(
             loader=FileSystemLoader(Path(self.charm_dir / 'templates'))
-        ).get_template('redis.php.j2')
+        ).get_template('redis.config.php.j2')
 
-        target = Path('/var/www/nextcloud/config/redis.conf')
+        target = Path('/var/www/nextcloud/config/redis.config.php')
 
         ctx = self._stored.redis_info
 
