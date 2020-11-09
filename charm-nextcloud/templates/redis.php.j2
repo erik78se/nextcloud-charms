@@ -1,6 +1,9 @@
 # DEPLOYED WITH JUJU DONT TOUCH THIS MANUALLY
 'memcache.distributed' => '\OC\Memcache\Redis',
 'memcache.locking' => '\OC\Memcache\Redis',
+'filelocking.enabled' => true,
+'memcache.local' => '\\OC\\Memcache\\Redis',
+
 'redis' => [
      'host' => '{{redis_hostname}}',
      'port' => {{redis_port}},
