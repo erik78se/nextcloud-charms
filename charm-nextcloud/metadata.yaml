@@ -19,3 +19,7 @@ requires:
   redis:
     interface: redis
     optional: true
+
+peers:
+  cluster:
+    interface: nextcloud-cluster

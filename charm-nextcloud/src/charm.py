@@ -89,6 +89,12 @@ class NextcloudCharm(CharmBase):
         for action, handler in action_bindings.items():
             self.framework.observe(action, handler)
 
+        ### CLUSTER RELATION
+        self.framework.observe(self.on.cluster_relation_changed, self._on_cluster_relation_changed)
+
+        self.framework.observe(self.on.cluster_relation_joined, self._on_cluster_relation_joined)
+        
+        self.framework.observe(self.on.cluster_relation_departed, self._on_cluster_relation_departed)
 
     def _on_install(self, event):
         # self._handle_storage()
@@ -126,6 +132,20 @@ class NextcloudCharm(CharmBase):
             # becomes leader and needs to perform that operation.
             event.defer()
             return
+
+    def _on_cluster_relation_joined(self, event):
+        logging.debug("!!!!!!!!cluster relation joined!!!!!!!!")
+        self.framework.breakpoint('joined')
+        logging.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+
+    def _on_cluster_relation_changed(self, event):
+        logging.debug("!!!!!!!!cluster relation changed!!!!!!!!")
+        self.framework.breakpoint('changed')
+    
+    def _on_cluster_relation_departed(self, event):
+        logging.debug("!!!!!!!!cluster relation departed!!!!!!!!")
+        self.framework.breakpoint('departed')
+        logging.debug("Unit {} left the cluster :(".format(event.unit.name))
 
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
