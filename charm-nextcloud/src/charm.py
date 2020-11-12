@@ -484,7 +484,7 @@ class NextcloudCharm(CharmBase):
                                     cwd='/var/www/nextcloud',
                                     universal_newlines=True).stdout
 
-            returndict = json.loads(output)
+            returndict = json.loads(output.split()[-1])
 
             logger.debug(returndict)
 
