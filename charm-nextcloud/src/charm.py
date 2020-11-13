@@ -454,23 +454,24 @@ class NextcloudCharm(CharmBase):
         """
         Evaluate the internal state to report on status.
         """
+        if not self._stored.nextcloud_fetched:
+            self.unit.status = BlockedStatus("Nextcloud not fetched.")
 
-        if (self._stored.nextcloud_fetched and
-                self._stored.nextcloud_initialized and
-                self._stored.database_available and
-                self._stored.apache_configured and
-                self._stored.php_configured):
+        elif not self._stored.nextcloud_initialized:
+            self.unit.status = BlockedStatus("Nextcloud not initialized.")
 
-            self.unit.status = ActiveStatus("Ready")
+        elif not self._stored.apache_configured:
+            self.unit.status = BlockedStatus("Apache not configured.")
 
-            self.unit.set_workload_version(self.get_nextcloud_status()['version'])
+        elif not self.self._stored.php_configured:
+            self.unit.status = BlockedStatus("PHP not configured.")
+
         elif not self._stored.database_available:
-
             self.unit.status = BlockedStatus("No database.")
 
         else:
-
-            self.unit.status = WaitingStatus("Not Ready...")
+            self.unit.set_workload_version(self.get_nextcloud_status()['version'])            
+            self.unit.status = ActiveStatus("Ready")
 
     def get_nextcloud_status(self) -> dict:
         """
