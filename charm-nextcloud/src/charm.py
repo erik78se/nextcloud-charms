@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 # https://github.com/canonical/ops-lib-pgsql
 pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
-NEXTCLOUD_CONFIG_PHP = '/var/www/nextcloud/config/config.php'
+NEXTCLOUD_ROOT = os.path.abspath('/var/www/nextcloud')
+NEXTCLOUD_CONFIG_PHP = os.path.abspath('/var/www/nextcloud/config/config.php')
 
 
 class NextcloudCharm(CharmBase):
@@ -137,10 +138,27 @@ class NextcloudCharm(CharmBase):
         logging.debug("!!!!!!!!cluster relation joined!!!!!!!!")
         self.framework.breakpoint('joined')
         logging.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+        if self.model.unit.is_leader():
+            with open(NEXTCLOUD_CONFIG_PHP) as f:
+                nextcloud_config = f.read()
+                event.relation.data[self.app]['nextcloud_config'] = str(nextcloud_config)
 
     def _on_cluster_relation_changed(self, event):
         logging.debug("!!!!!!!!cluster relation changed!!!!!!!!")
         self.framework.breakpoint('changed')
+        if not self.model.unit.is_leader():
+            nextcloud_config = nextcloud_config = event.relation.data[self.app]['nextcloud_config']
+            with open(NEXTCLOUD_CONFIG_PHP, "w") as f:
+                f.write(nextcloud_config)
+            data_dir_path = os.path.join(NEXTCLOUD_ROOT, 'data')
+            ocdata_path = os.path.join(data_dir_path, '.ocdata')
+            if not os.path.exists(data_dir_path):
+                os.mkdir(data_dir_path)
+            if not os.path.exists(ocdata_path):
+                open(ocdata_path, 'a').close()
+            self._set_directory_permissions()
+            self._stored.database_available = True
+            self._stored.nextcloud_initialized = True
     
     def _on_cluster_relation_departed(self, event):
         logging.debug("!!!!!!!!cluster relation departed!!!!!!!!")
@@ -152,6 +170,10 @@ class NextcloudCharm(CharmBase):
             # Leader has not yet set requirements. Wait until next event,
             # or risk connecting to an incorrect database.
             return
+
+        # Only install nextcloud first time. Other peers will copy the configuration
+        if not self.model.unit.is_leader():
+            return        
 
         # The connection to the primary database has been created,
         # changed or removed. More specific events are available, but
@@ -183,7 +205,7 @@ class NextcloudCharm(CharmBase):
                 self._add_initial_trusted_domain()
 
                 installed = self.get_nextcloud_status()['installed']
-
+                installed = True
                 if installed:
 
                     logger.debug("===== Nextcloud install_status: {}====".format(installed))
@@ -463,7 +485,7 @@ class NextcloudCharm(CharmBase):
         elif not self._stored.apache_configured:
             self.unit.status = BlockedStatus("Apache not configured.")
 
-        elif not self.self._stored.php_configured:
+        elif not self._stored.php_configured:
             self.unit.status = BlockedStatus("PHP not configured.")
 
         elif not self._stored.database_available:
