@@ -16,3 +16,6 @@ requires:
   db:
     interface: pgsql
 
+  redis:
+    interface: redis
+    optional: true
