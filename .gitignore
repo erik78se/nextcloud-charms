@@ -1,4 +1,4 @@
 .idea/
 charm-nextcloud/build/
 nextcloud.charm
-
+.tox/

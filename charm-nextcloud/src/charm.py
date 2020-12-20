@@ -6,6 +6,7 @@ import logging
 import subprocess
 import sys
 import os
+import socket
 from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 import json
@@ -24,7 +25,9 @@ from ops.model import (
     WaitingStatus
 )
 
-from utils import open_port
+from utils import open_port, occ_add_trusted_domain
+
+from interface_http import HttpProvider
 
 logger = logging.getLogger(__name__)
 
@@ -34,50 +37,47 @@ pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 NEXTCLOUD_CONFIG_PHP = '/var/www/nextcloud/config/config.php'
 
+
 class NextcloudCharm(CharmBase):
     _stored = StoredState()
-    
+
     def __init__(self, *args):
         super().__init__(*args)
+        self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation in metadata.yaml
 
-        self._stored.set_default(data_dir='/var/www/nextcloud/data/')
+        # The website provider takes care of incoming relations on the http interface.
+        self.website = HttpProvider(self, 'website', socket.getfqdn(), 80)
 
-        self._stored.set_default(nextcloud_fetched=False)
-
-        self._stored.set_default(nextcloud_initialized=False)
-
-        self._stored.set_default(database_available=False)
-
-        self._stored.set_default(apache_configured=False)
-
-        self._stored.set_default(php_configured=False)
-
-        self.framework.observe(self.on.install, self._on_install)
-        
-        self.framework.observe(self.on.config_changed, self._on_config_changed)
+        self._stored.set_default(data_dir='/var/www/nextcloud/data/',
+                                 nextcloud_fetched=False,
+                                 nextcloud_initialized=False,
+                                 database_available=False,
+                                 apache_configured=False,
+                                 php_configured=False)
 
         self._stored.set_default(db_conn_str=None, db_uri=None, db_ro_uris=[])
 
-        self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation in metadata.yaml
+        event_bindings = {
+            self.on.install: self._on_install,
+            self.on.config_changed: self._on_config_changed,
+            self.on.start: self._on_start,
+            self.db.on.database_relation_joined: self._on_database_relation_joined,
+            self.db.on.master_changed: self._on_master_changed,
+            self.on.update_status: self._on_update_status
+        }
 
-        self.framework.observe(self.db.on.database_relation_joined, self._on_database_relation_joined)
+        for event, handler in event_bindings.items():
+            self.framework.observe(event, handler)
 
-        self.framework.observe(self.db.on.master_changed, self._on_master_changed)
+        action_bindings = {
+            self.on.add_trusted_domain_action: self._on_add_trusted_domain_action,
+            self.on.add_missing_indices_action: self._on_add_missing_indices_action,
+            self.on.convert_filecache_bigint_action: self._on_convert_filecache_bigint_action,
+            self.on.maintenance_action: self._on_maintenance_action
+        }
 
-        self.framework.observe(self.on.start, self._on_start)
-
-        self.framework.observe(self.on.update_status, self._on_update_status)
-
-        
-        ### ACTIONS ###
-        self.framework.observe(self.on.add_trusted_domain_action,
-                               self._on_add_trusted_domain_action)
-        self.framework.observe(self.on.add_missing_indices_action,
-                               self._on_add_missing_indices_action)
-        self.framework.observe(self.on.convert_filecache_bigint_action,
-                               self._on_convert_filecache_bigint_action)
-        self.framework.observe(self.on.maintenance_action,
-                               self._on_maintenance_action)
+        for action, handler in action_bindings.items():
+            self.framework.observe(action, handler)
 
 
     def _on_install(self, event):
@@ -88,8 +88,7 @@ class NextcloudCharm(CharmBase):
         if not self._stored.nextcloud_fetched:
             # Fetch nextcloud to /var/www/
             self._fetch_nextcloud()
-        
-        
+
     def _on_config_changed(self, event):
         """
         Any configuration change trigger a complete reconfigure of
@@ -98,14 +97,15 @@ class NextcloudCharm(CharmBase):
         :return:
         """
         self._config_apache2()
-        
+
         self._config_php()
+
+        # self._config_website()
 
         subprocess.check_call(['systemctl', 'restart', 'apache2.service'])
 
         self._on_update_status(event)
 
-        
     def _on_database_relation_joined(self, event: pgsql.DatabaseRelationJoinedEvent):
         if self.model.unit.is_leader():
             # Provide requirements to the PostgreSQL server.
@@ -116,21 +116,21 @@ class NextcloudCharm(CharmBase):
             # becomes leader and needs to perform that operation.
             event.defer()
             return
-            
+
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
             # Leader has not yet set requirements. Wait until next event,
             # or risk connecting to an incorrect database.
             return
-        
+
         # The connection to the primary database has been created,
         # changed or removed. More specific events are available, but
         # most charms will find it easier to just handle the Changed
         # events. event.master is None if the master database is not
         # available, or a pgsql.ConnectionString instance.
-        
+
         logger.debug("=== Database master_changed event ===")
-        
+
         self._stored.db_conn_str = None if event.master is None else event.master.conn_str
         self._stored.db_uri = None if event.master is None else event.master.uri
         self._stored.dbname = None if event.master is None else event.master.dbname
@@ -149,7 +149,7 @@ class NextcloudCharm(CharmBase):
                 self._set_directory_permissions()
 
                 self._init_nextcloud()
-            
+
                 self._add_initial_trusted_domain()
 
                 installed = self.get_nextcloud_status()['installed']
@@ -158,37 +158,36 @@ class NextcloudCharm(CharmBase):
 
                     logger.debug("===== Nextcloud install_status: {}====".format(installed))
 
-                    self._stored.nextcloud_initialized = True                    
+                    self._stored.nextcloud_initialized = True
 
-            
     def _on_start(self, event):
 
         if not self._stored.nextcloud_initialized:
 
             event.defer()
-            
+
             return
 
         try:
 
-            subprocess.check_call(['systemctl','restart','apache2.service'])
-            
+            subprocess.check_call(['systemctl', 'restart', 'apache2.service'])
+
             self._on_update_status(event)
 
             open_port('80')
-           
+
         except subprocess.CalledProcessError as e:
-            
+
             print(e)
 
             sys.exit(-1)
 
-    ## ACTIONS
+    # ACTIONS
 
     def _on_add_trusted_domain_action(self, event):
         pass
 
-    def _on_add_missing_indices_action(self,event):
+    def _on_add_missing_indices_action(self, event):
         pass
 
     def _on_add_missing_indices_action(self, event):
@@ -214,7 +213,6 @@ class NextcloudCharm(CharmBase):
         except subprocess.CalledProcessError as e:
             print(e)
             sys.exit(-1)
-
 
     def _install_deps(self):
         """
@@ -246,11 +244,10 @@ class NextcloudCharm(CharmBase):
             subprocess.run(command, check=True)
 
             self.unit.status = MaintenanceStatus("Dependencies installed")
-            
+
         except subprocess.CalledProcessError as e:
             print(e)
             sys.exit(-1)
-
 
     def _fetch_nextcloud(self):
         """
@@ -261,19 +258,19 @@ class NextcloudCharm(CharmBase):
 
         import requests
         import tarfile
-        
+
         source = 'https://download.nextcloud.com/server/releases/nextcloud-18.0.3.tar.bz2'
 
         checksum = '7b67e709006230f90f95727f9fa92e8c73a9e93458b22103293120f9cb50fd72'
 
         try:
-            
+
             response = requests.get(source, allow_redirects=True, stream=True)
-            
-            dst=Path('/var/www/')
-            
-            with tarfile.open( fileobj=BytesIO( response.content ), mode='r:bz2' ) as tfile:            
-                tfile.extractall( path=dst )
+
+            dst = Path('/var/www/')
+
+            with tarfile.open(fileobj=BytesIO(response.content), mode='r:bz2') as tfile:
+                tfile.extractall(path=dst)
 
             self.unit.status = MaintenanceStatus("Sources installed")
 
@@ -283,17 +280,15 @@ class NextcloudCharm(CharmBase):
             print(e)
             sys.exit(-1)
 
-
     def _handle_storage(self):
         """ 
-       
+
         Handles juju storage, using 'location' in metadata.yaml if provided on deploy.
-       
+
         """
-        pass #not implemented
+        pass  # not implemented
         self.unit.status = MaintenanceStatus("Begin handle storage...")
 
-    
         data_dir = unitdata.kv().get("nextcloud.storage.data.mount")
 
         if os.path.exists(str(data_dir)):
@@ -308,8 +303,6 @@ class NextcloudCharm(CharmBase):
         else:
             # If no custom data_dir get to us via storage, we use the default
             data_dir = '/var/www/nextcloud/data'
-
-
 
     def _config_php(self):
         """
@@ -327,18 +320,17 @@ class NextcloudCharm(CharmBase):
         }
 
         template = Environment(
-            loader=FileSystemLoader(Path( self.charm_dir / 'templates' ))).get_template('nextcloud.ini.j2')
+            loader=FileSystemLoader(Path(self.charm_dir / 'templates'))).get_template('nextcloud.ini.j2')
 
         target = Path('/etc/php/7.2/mods-available/nextcloud.ini')
 
-        target.write_text( template.render( phpmod_context ) )
-        
+        target.write_text(template.render(phpmod_context))
+
         subprocess.check_call(['phpenmod', 'nextcloud'])
 
         self._stored.php_configured = True
 
         self.unit.status = MaintenanceStatus("php config complete.")
-
 
     def _init_nextcloud(self):
         """
@@ -354,48 +346,50 @@ class NextcloudCharm(CharmBase):
                'dbuser': self._stored.dbuser,
                'adminpassword': self.config.get('admin-password'),
                'adminusername': self.config.get('admin-username'),
-               'datadir': '/var/www/nextcloud/data' 
+               'datadir': '/var/www/nextcloud/data'
                }
-        
+
         nextcloud_init = ("sudo -u www-data /usr/bin/php occ maintenance:install "
-                      "--database {dbtype} --database-name {dbname} "
-                      "--database-host {dbhost} --database-pass {dbpass} "
-                      "--database-user {dbuser} --admin-user {adminusername} "
-                      "--admin-pass {adminpassword} "
-                      "--data-dir {datadir} ").format(**ctx)
+                          "--database {dbtype} --database-name {dbname} "
+                          "--database-host {dbhost} --database-pass {dbpass} "
+                          "--database-user {dbuser} --admin-user {adminusername} "
+                          "--admin-pass {adminpassword} "
+                          "--data-dir {datadir} ").format(**ctx)
 
-        subprocess.call(nextcloud_init.split(),cwd='/var/www/nextcloud')
+        subprocess.call(nextcloud_init.split(), cwd='/var/www/nextcloud')
 
-        
     def _add_initial_trusted_domain(self):
-        
-        trusted_domain = self.model.get_binding('website').network.ingress_address
+        """
+        Adds in 2 trusted domains:
+        1. ingress address.
+        2. fqdn config
+        :return:
+        """
+        ingress_addr = self.model.get_binding('website').network.ingress_address
 
-        # Adds the ingress_address to trusted domains
-        add_trusted_domain = ("sudo -u www-data php /var/www/nextcloud/occ config:system:set "
-                              "trusted_domains 1 "
-                              " --value={} ").format(trusted_domain)
+        # Adds the ingress_address to trusted domains on index: 1
+        occ_add_trusted_domain(ingress_addr, 1)
 
-        subprocess.call(add_trusted_domain.split(),cwd='/var/www/nextcloud')
+        # Adds the fqdn to trusted domains on index: 2 (if set)
+        if self.config['fqdn']:
+            occ_add_trusted_domain(self.config['fqdn'],2)
 
 
     def _set_directory_permissions(self):
-        
-        subprocess.call(("sudo chown -R www-data:www-data /var/www/nextcloud").split(),
-                        cwd='/var/www/nextcloud')
 
+        subprocess.call("sudo chown -R www-data:www-data /var/www/nextcloud".split(),
+                        cwd='/var/www/nextcloud')
 
     def _patch_config(self):
 
-        #TODO: This is wrong and will also replace other values in config.php
-        #BUG - perhaps add a config here with trusted_domains.
+        # TODO: This is wrong and will also replace other values in config.php
+        # BUG - perhaps add a config here with trusted_domains.
         # self.unit.ingress_address
         Path('/var/www/nextcloud/config/config.php').write_text(
             Path('/var/www/nextcloud/config/config.php').open().read().replace(
-                "localhost", self.config.get('fqdn') or "127.0.0.1" ))
+                "localhost", self.config.get('fqdn') or "127.0.0.1"))
 
         self.unit.status = MaintenanceStatus("Nextcloud init complete.")
-
 
     def _config_apache2(self):
         """
@@ -404,15 +398,15 @@ class NextcloudCharm(CharmBase):
         self.unit.status = MaintenanceStatus("Begin config apache2.")
 
         template = Environment(
-            loader=FileSystemLoader(Path( self.charm_dir / 'templates' ))
-                                ).get_template('nextcloud.conf.j2')
+            loader=FileSystemLoader(Path(self.charm_dir / 'templates'))
+        ).get_template('nextcloud.conf.j2')
 
         target = Path('/etc/apache2/sites-available/nextcloud.conf')
 
         ctx = {}
-        
-        target.write_text( template.render( ctx ) )
-        # Enable required modules.        
+
+        target.write_text(template.render(ctx))
+        # Enable required modules.
         for module in ['rewrite', 'headers', 'env', 'dir', 'mime']:
             subprocess.call(['a2enmod', module])
 
@@ -431,15 +425,15 @@ class NextcloudCharm(CharmBase):
         Evaluate the internal state to report on status.
         """
 
-        if ( self._stored.nextcloud_fetched \
-                and self._stored.nextcloud_initialized \
-                and self._stored.database_available \
-                and self._stored.apache_configured \
-                and self._stored.php_configured):
+        if (self._stored.nextcloud_fetched and
+                self._stored.nextcloud_initialized and
+                self._stored.database_available and
+                self._stored.apache_configured and
+                self._stored.php_configured):
 
             self.unit.status = ActiveStatus("Ready")
 
-            self.unit.set_workload_version(self.get_nextcloud_status()['version'])            
+            self.unit.set_workload_version(self.get_nextcloud_status()['version'])
         elif not self._stored.database_available:
 
             self.unit.status = BlockedStatus("No database.")
@@ -448,7 +442,6 @@ class NextcloudCharm(CharmBase):
 
             self.unit.status = WaitingStatus("Not Ready...")
 
-
     def get_nextcloud_status(self) -> dict:
         """
         Return dict with nextcloud status.
@@ -456,15 +449,15 @@ class NextcloudCharm(CharmBase):
         ns = "sudo -u www-data /usr/bin/php occ status --output=json --no-warnings"
 
         try:
-            output = subprocess.run( ns.split(),
-                         stdout=subprocess.PIPE,
-                         cwd='/var/www/nextcloud',
-                         universal_newlines=True).stdout
+            output = subprocess.run(ns.split(),
+                                    stdout=subprocess.PIPE,
+                                    cwd='/var/www/nextcloud',
+                                    universal_newlines=True).stdout
 
             returndict = json.loads(output)
 
             logger.debug(returndict)
-            
+
         except subprocess.CalledProcessError as e:
 
             print(e)
@@ -472,6 +465,7 @@ class NextcloudCharm(CharmBase):
             sys.exit(-1)
 
         return returndict
-        
+
+
 if __name__ == "__main__":
     main(NextcloudCharm)
