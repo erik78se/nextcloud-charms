@@ -19,6 +19,10 @@ options:
     default: ""
     description: >
       FQDN of Nextcloud instance
+  port:
+    type: int
+    description: >
+      Port where the Nextcloud website will be listening.
   php_max_file_uploads:
     type: int
     default: 20

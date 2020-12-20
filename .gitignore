@@ -4,3 +4,4 @@ nextcloud.charm
 *.pyc
 *~
 *build*
+.tox/
