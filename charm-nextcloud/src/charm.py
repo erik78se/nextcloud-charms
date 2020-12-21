@@ -135,18 +135,24 @@ class NextcloudCharm(CharmBase):
             return
 
     def _on_cluster_relation_joined(self, event):
-        logging.debug("!!!!!!!!cluster relation joined!!!!!!!!")
+        logger.debug("!!!!!!!!cluster relation joined!!!!!!!!")
         self.framework.breakpoint('joined')
-        logging.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+        logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+
+    def _on_cluster_relation_changed(self, event):
+        logger.debug("!!!!!!!!cluster relation changed!!!!!!!!")
+        self.framework.breakpoint('changed')
         if self.model.unit.is_leader():
+            if not os.path.exists(NEXTCLOUD_CONFIG_PHP):
+                event.defer()
+                return
             with open(NEXTCLOUD_CONFIG_PHP) as f:
                 nextcloud_config = f.read()
                 event.relation.data[self.app]['nextcloud_config'] = str(nextcloud_config)
-
-    def _on_cluster_relation_changed(self, event):
-        logging.debug("!!!!!!!!cluster relation changed!!!!!!!!")
-        self.framework.breakpoint('changed')
-        if not self.model.unit.is_leader():
+        else:
+            if 'nextcloud_config' not in event.relation.data[self.app]:
+                event.defer()
+                return
             nextcloud_config = nextcloud_config = event.relation.data[self.app]['nextcloud_config']
             with open(NEXTCLOUD_CONFIG_PHP, "w") as f:
                 f.write(nextcloud_config)
@@ -161,9 +167,9 @@ class NextcloudCharm(CharmBase):
             self._stored.nextcloud_initialized = True
     
     def _on_cluster_relation_departed(self, event):
-        logging.debug("!!!!!!!!cluster relation departed!!!!!!!!")
+        logger.debug("!!!!!!!!cluster relation departed!!!!!!!!")
         self.framework.breakpoint('departed')
-        logging.debug("Unit {} left the cluster :(".format(event.unit.name))
+        logger.debug("Unit {} left the cluster :(".format(event.unit.name))
 
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
@@ -205,7 +211,7 @@ class NextcloudCharm(CharmBase):
                 self._add_initial_trusted_domain()
 
                 installed = self.get_nextcloud_status()['installed']
-                installed = True
+
                 if installed:
 
                     logger.debug("===== Nextcloud install_status: {}====".format(installed))
@@ -492,7 +498,8 @@ class NextcloudCharm(CharmBase):
             self.unit.status = BlockedStatus("No database.")
 
         else:
-            self.unit.set_workload_version(self.get_nextcloud_status()['version'])            
+            if self.model.unit.is_leader():
+                self.unit.set_workload_version(self.get_nextcloud_status()['version'])
             self.unit.status = ActiveStatus("Ready")
 
     def get_nextcloud_status(self) -> dict:
