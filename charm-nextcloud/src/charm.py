@@ -136,12 +136,10 @@ class NextcloudCharm(CharmBase):
 
     def _on_cluster_relation_joined(self, event):
         logger.debug("!!!!!!!!cluster relation joined!!!!!!!!")
-        self.framework.breakpoint('joined')
         logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
 
     def _on_cluster_relation_changed(self, event):
         logger.debug("!!!!!!!!cluster relation changed!!!!!!!!")
-        self.framework.breakpoint('changed')
         if self.model.unit.is_leader():
             if not os.path.exists(NEXTCLOUD_CONFIG_PHP):
                 event.defer()
@@ -168,7 +166,6 @@ class NextcloudCharm(CharmBase):
     
     def _on_cluster_relation_departed(self, event):
         logger.debug("!!!!!!!!cluster relation departed!!!!!!!!")
-        self.framework.breakpoint('departed')
         logger.debug("Unit {} left the cluster :(".format(event.unit.name))
 
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
