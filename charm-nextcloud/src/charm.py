@@ -104,7 +104,7 @@ class NextcloudCharm(CharmBase):
 
         if not self._stored.nextcloud_fetched:
             # Fetch nextcloud to /var/www/
-            self._fetch_nextcloud()
+            self._fetch_and_extract_nextcloud()
 
     def _on_config_changed(self, event):
         """
@@ -304,7 +304,7 @@ class NextcloudCharm(CharmBase):
             print(e)
             sys.exit(-1)
 
-    def _fetch_nextcloud(self):
+    def _fetch_and_extract_nextcloud(self):
         """
         Fetch and Install nextcloud from internet
         Sources are about 100M.
