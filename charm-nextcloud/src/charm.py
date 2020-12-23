@@ -37,7 +37,8 @@ logger = logging.getLogger(__name__)
 # https://github.com/canonical/ops-lib-pgsql
 pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
-NEXTCLOUD_CONFIG_PHP = '/var/www/nextcloud/config/config.php'
+NEXTCLOUD_ROOT = os.path.abspath('/var/www/nextcloud')
+NEXTCLOUD_CONFIG_PHP = os.path.abspath('/var/www/nextcloud/config/config.php')
 
 
 class NextcloudCharm(CharmBase):
@@ -89,6 +90,12 @@ class NextcloudCharm(CharmBase):
         for action, handler in action_bindings.items():
             self.framework.observe(action, handler)
 
+        ### CLUSTER RELATION
+        self.framework.observe(self.on.cluster_relation_changed, self._on_cluster_relation_changed)
+
+        self.framework.observe(self.on.cluster_relation_joined, self._on_cluster_relation_joined)
+        
+        self.framework.observe(self.on.cluster_relation_departed, self._on_cluster_relation_departed)
 
     def _on_install(self, event):
         # self._handle_storage()
@@ -127,11 +134,49 @@ class NextcloudCharm(CharmBase):
             event.defer()
             return
 
+    def _on_cluster_relation_joined(self, event):
+        logger.debug("!!!!!!!!cluster relation joined!!!!!!!!")
+        logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+
+    def _on_cluster_relation_changed(self, event):
+        logger.debug("!!!!!!!!cluster relation changed!!!!!!!!")
+        if self.model.unit.is_leader():
+            if not os.path.exists(NEXTCLOUD_CONFIG_PHP):
+                event.defer()
+                return
+            with open(NEXTCLOUD_CONFIG_PHP) as f:
+                nextcloud_config = f.read()
+                event.relation.data[self.app]['nextcloud_config'] = str(nextcloud_config)
+        else:
+            if 'nextcloud_config' not in event.relation.data[self.app]:
+                event.defer()
+                return
+            nextcloud_config = nextcloud_config = event.relation.data[self.app]['nextcloud_config']
+            with open(NEXTCLOUD_CONFIG_PHP, "w") as f:
+                f.write(nextcloud_config)
+            data_dir_path = os.path.join(NEXTCLOUD_ROOT, 'data')
+            ocdata_path = os.path.join(data_dir_path, '.ocdata')
+            if not os.path.exists(data_dir_path):
+                os.mkdir(data_dir_path)
+            if not os.path.exists(ocdata_path):
+                open(ocdata_path, 'a').close()
+            self._set_directory_permissions()
+            self._stored.database_available = True
+            self._stored.nextcloud_initialized = True
+    
+    def _on_cluster_relation_departed(self, event):
+        logger.debug("!!!!!!!!cluster relation departed!!!!!!!!")
+        logger.debug("Unit {} left the cluster :(".format(event.unit.name))
+
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
             # Leader has not yet set requirements. Wait until next event,
             # or risk connecting to an incorrect database.
             return
+
+        # Only install nextcloud first time. Other peers will copy the configuration
+        if not self.model.unit.is_leader():
+            return        
 
         # The connection to the primary database has been created,
         # changed or removed. More specific events are available, but
@@ -434,23 +479,25 @@ class NextcloudCharm(CharmBase):
         """
         Evaluate the internal state to report on status.
         """
+        if not self._stored.nextcloud_fetched:
+            self.unit.status = BlockedStatus("Nextcloud not fetched.")
 
-        if (self._stored.nextcloud_fetched and
-                self._stored.nextcloud_initialized and
-                self._stored.database_available and
-                self._stored.apache_configured and
-                self._stored.php_configured):
+        elif not self._stored.nextcloud_initialized:
+            self.unit.status = BlockedStatus("Nextcloud not initialized.")
 
-            self.unit.status = ActiveStatus("Ready")
+        elif not self._stored.apache_configured:
+            self.unit.status = BlockedStatus("Apache not configured.")
 
-            self.unit.set_workload_version(self.get_nextcloud_status()['version'])
+        elif not self._stored.php_configured:
+            self.unit.status = BlockedStatus("PHP not configured.")
+
         elif not self._stored.database_available:
-
             self.unit.status = BlockedStatus("No database.")
 
         else:
-
-            self.unit.status = WaitingStatus("Not Ready...")
+            if self.model.unit.is_leader():
+                self.unit.set_workload_version(self.get_nextcloud_status()['version'])
+            self.unit.status = ActiveStatus("Ready")
 
     def get_nextcloud_status(self) -> dict:
         """
@@ -464,7 +511,7 @@ class NextcloudCharm(CharmBase):
                                     cwd='/var/www/nextcloud',
                                     universal_newlines=True).stdout
 
-            returndict = json.loads(output)
+            returndict = json.loads(output.split()[-1])
 
             logger.debug(returndict)
 
