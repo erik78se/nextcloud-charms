@@ -27,7 +27,7 @@ from ops.model import (
 
 
 
-from utils import open_port, occ_add_trusted_domain
+from utils import open_port, add_trusted_domain, remove_trusted_domain
 from interface_http import HttpProvider
 import interface_redis
 
@@ -136,7 +136,13 @@ class NextcloudCharm(CharmBase):
 
     def _on_cluster_relation_joined(self, event):
         logger.debug("!!!!!!!!cluster relation joined!!!!!!!!")
-        logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+        if self.model.unit.is_leader():
+            logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+            if not self._stored.nextcloud_initialized:
+                event.defer()
+                return
+            peer_ingress_address = event.relation.data.get(event.unit).get('ingress-address')
+            add_trusted_domain(peer_ingress_address)
 
     def _on_cluster_relation_changed(self, event):
         logger.debug("!!!!!!!!cluster relation changed!!!!!!!!")
@@ -166,7 +172,15 @@ class NextcloudCharm(CharmBase):
     
     def _on_cluster_relation_departed(self, event):
         logger.debug("!!!!!!!!cluster relation departed!!!!!!!!")
-        logger.debug("Unit {} left the cluster :(".format(event.unit.name))
+        if self.model.unit.is_leader():
+            logger.debug("Unit {} left the cluster :(".format(event.unit.name))
+            if not self._stored.nextcloud_initialized:
+                event.defer()
+                return
+            self.framework.breakpoint('departed')
+            # TODO: Seems like the unit data is gone already. Which mean I can't get hold if its ingress-address to remove it from trusted domains...
+            #peer_ingress_address = event.relation.data.get(event.unit).get('ingress-address')
+            #remove_trusted_domain(peer_ingress_address)
 
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
@@ -422,13 +436,12 @@ class NextcloudCharm(CharmBase):
         """
         ingress_addr = self.model.get_binding('website').network.ingress_address
 
-        # Adds the ingress_address to trusted domains on index: 1
-        occ_add_trusted_domain(ingress_addr, 1)
+        # Adds the ingress_address to trusted domains
+        add_trusted_domain(ingress_addr)
 
-        # Adds the fqdn to trusted domains on index: 2 (if set)
+        # Adds the fqdn to trusted domains (if set)
         if self.config['fqdn']:
-            occ_add_trusted_domain(self.config['fqdn'],2)
-
+            add_trusted_domain(self.config['fqdn'])
 
     def _set_directory_permissions(self):
 
