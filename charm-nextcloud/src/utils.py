@@ -41,12 +41,15 @@ def occ_remove_trusted_domain(domain):
     if domain in current_domains:
         current_domains.remove(domain)
         # First delete all trusted domains from config.php since they might have indices not in order.
-        delete_trusted_domains = "sudo -u www-data php /var/www/nextcloud/occ config:system:delete trusted_domains"
-        run(delete_trusted_domains.split(), cwd='/var/www/nextcloud')
+        occ_remove_all_trusted_domains()
         if current_domains:
             # Now, add all the domains with indices in order starting from 0
             for index, domain in enumerate(current_domains):
                 occ_add_trusted_domain(domain, index)
+
+def occ_remove_all_trusted_domains():
+    delete_trusted_domains = "sudo -u www-data php /var/www/nextcloud/occ config:system:delete trusted_domains"
+    run(delete_trusted_domains.split(), cwd='/var/www/nextcloud')
 
 def remove_trusted_domain(domain):
     occ_remove_trusted_domain(domain)
@@ -60,6 +63,14 @@ def occ_get_trusted_domains():
     output = run(get_trusted_domain.split(), cwd='/var/www/nextcloud', stdout=PIPE, universal_newlines=True)
     domains = output.stdout.split()
     return domains
+
+def update_trusted_domains_peer_ips(domains):
+    current_domains = occ_get_trusted_domains()
+    # Copy 'localhost' and fqdn but replace all peers IP:s with the ones currently available in the relation.
+    new_domains = current_domains[0:2] + domains[:]
+    occ_remove_all_trusted_domains()
+    for index, d in enumerate(new_domains):
+        occ_add_trusted_domain(d, index)
 
 def enable_ping():
     _modify_port(None, None, protocol='icmp', hook_tool="open-port")
