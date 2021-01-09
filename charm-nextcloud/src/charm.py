@@ -27,7 +27,7 @@ from ops.model import (
 
 
 
-from utils import open_port, occ_add_trusted_domain
+from utils import open_port, occ_add_trusted_domain, remove_trusted_domain, update_trusted_domains_peer_ips
 from interface_http import HttpProvider
 import interface_redis
 
@@ -64,9 +64,14 @@ class NextcloudCharm(CharmBase):
             self.on.install: self._on_install,
             self.on.config_changed: self._on_config_changed,
             self.on.start: self._on_start,
+            self.on.leader_elected: self._on_leader_elected,
             self.db.on.database_relation_joined: self._on_database_relation_joined,
             self.db.on.master_changed: self._on_master_changed,
-            self.on.update_status: self._on_update_status
+            self.on.update_status: self._on_update_status,
+            self.on.cluster_relation_changed: self._on_cluster_relation_changed,
+            self.on.cluster_relation_joined: self._on_cluster_relation_joined,         
+            self.on.cluster_relation_departed: self._on_cluster_relation_departed,
+            self.on.cluster_relation_broken: self._on_cluster_relation_broken
         }
 
         ### REDIS
@@ -89,13 +94,6 @@ class NextcloudCharm(CharmBase):
 
         for action, handler in action_bindings.items():
             self.framework.observe(action, handler)
-
-        ### CLUSTER RELATION
-        self.framework.observe(self.on.cluster_relation_changed, self._on_cluster_relation_changed)
-
-        self.framework.observe(self.on.cluster_relation_joined, self._on_cluster_relation_joined)
-        
-        self.framework.observe(self.on.cluster_relation_departed, self._on_cluster_relation_departed)
 
     def _on_install(self, event):
         # self._handle_storage()
@@ -134,20 +132,37 @@ class NextcloudCharm(CharmBase):
             event.defer()
             return
 
+    def _on_leader_elected(self, event):
+        logger.debug("!!!!!!!!new leader!!!!!!!!")
+        self.framework.breakpoint('leader')
+        self.update_config_php_trusted_domains()
+
+    def update_config_php_trusted_domains(self):
+        if not os.path.exists(NEXTCLOUD_CONFIG_PHP):
+            return
+        self.framework.breakpoint('trusted')
+        cluster_relation = self.model.relations['cluster'][0]
+        relation_units_ip = [cluster_relation.data[u]['ingress-address'] for u in cluster_relation.units]
+        this_unit_ip = cluster_relation.data[self.model.unit]['ingress-address']
+        relation_units_ip.append(this_unit_ip)
+        update_trusted_domains_peer_ips(relation_units_ip)
+        with open(NEXTCLOUD_CONFIG_PHP) as f:
+            nextcloud_config = f.read()
+            cluster_relation.data[self.app]['nextcloud_config'] = str(nextcloud_config)
+
     def _on_cluster_relation_joined(self, event):
         logger.debug("!!!!!!!!cluster relation joined!!!!!!!!")
-        logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+        if self.model.unit.is_leader():
+            logger.debug("Welcome {} to the cluster, data: {}".format(event.unit.name, event.relation.data[event.unit]))
+            if not self._stored.nextcloud_initialized:
+                event.defer()
+                return
+            self.framework.breakpoint('joined')
+            self.update_config_php_trusted_domains()
 
     def _on_cluster_relation_changed(self, event):
         logger.debug("!!!!!!!!cluster relation changed!!!!!!!!")
-        if self.model.unit.is_leader():
-            if not os.path.exists(NEXTCLOUD_CONFIG_PHP):
-                event.defer()
-                return
-            with open(NEXTCLOUD_CONFIG_PHP) as f:
-                nextcloud_config = f.read()
-                event.relation.data[self.app]['nextcloud_config'] = str(nextcloud_config)
-        else:
+        if not self.model.unit.is_leader():
             if 'nextcloud_config' not in event.relation.data[self.app]:
                 event.defer()
                 return
@@ -166,7 +181,12 @@ class NextcloudCharm(CharmBase):
     
     def _on_cluster_relation_departed(self, event):
         logger.debug("!!!!!!!!cluster relation departed!!!!!!!!")
-        logger.debug("Unit {} left the cluster :(".format(event.unit.name))
+        self.framework.breakpoint('departed')
+        if self.model.unit.is_leader():
+            self.update_config_php_trusted_domains()
+
+    def _on_cluster_relation_broken(self, event):
+        logger.debug("!!!!!!!!cluster relation broken!!!!!!!!")
 
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
@@ -420,15 +440,15 @@ class NextcloudCharm(CharmBase):
         2. fqdn config
         :return:
         """
+
+        # Adds the fqdn to trusted domains (if set)
+        if self.config['fqdn']:
+            occ_add_trusted_domain(self.config['fqdn'], 1)
+
         ingress_addr = self.model.get_binding('website').network.ingress_address
 
-        # Adds the ingress_address to trusted domains on index: 1
-        occ_add_trusted_domain(ingress_addr, 1)
-
-        # Adds the fqdn to trusted domains on index: 2 (if set)
-        if self.config['fqdn']:
-            occ_add_trusted_domain(self.config['fqdn'],2)
-
+        # Adds the ingress_address to trusted domains
+        occ_add_trusted_domain(ingress_addr, 2)
 
     def _set_directory_permissions(self):
 
