@@ -27,7 +27,8 @@ from ops.model import (
 
 
 
-from utils import open_port, occ_add_trusted_domain, remove_trusted_domain, update_trusted_domains_peer_ips
+from utils import open_port
+from occ import Occ
 from interface_http import HttpProvider
 import interface_redis
 
@@ -132,6 +133,7 @@ class NextcloudCharm(CharmBase):
             event.defer()
             return
 
+    # Only leader is running this hook (verify this)
     def _on_leader_elected(self, event):
         logger.debug("!!!!!!!!new leader!!!!!!!!")
         self.framework.breakpoint('leader')
@@ -145,7 +147,7 @@ class NextcloudCharm(CharmBase):
         relation_units_ip = [cluster_relation.data[u]['ingress-address'] for u in cluster_relation.units]
         this_unit_ip = cluster_relation.data[self.model.unit]['ingress-address']
         relation_units_ip.append(this_unit_ip)
-        update_trusted_domains_peer_ips(relation_units_ip)
+        Occ.update_trusted_domains_peer_ips(relation_units_ip)
         with open(NEXTCLOUD_CONFIG_PHP) as f:
             nextcloud_config = f.read()
             cluster_relation.data[self.app]['nextcloud_config'] = str(nextcloud_config)
@@ -443,12 +445,12 @@ class NextcloudCharm(CharmBase):
 
         # Adds the fqdn to trusted domains (if set)
         if self.config['fqdn']:
-            occ_add_trusted_domain(self.config['fqdn'], 1)
+            Occ.occ_add_trusted_domain(self.config['fqdn'], 1)
 
         ingress_addr = self.model.get_binding('website').network.ingress_address
 
         # Adds the ingress_address to trusted domains
-        occ_add_trusted_domain(ingress_addr, 2)
+        Occ.occ_add_trusted_domain(ingress_addr, 2)
 
     def _set_directory_permissions(self):
 
