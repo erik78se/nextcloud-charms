@@ -87,7 +87,6 @@ class NextcloudCharm(CharmBase):
             self.framework.observe(event, handler)
 
         action_bindings = {
-            self.on.add_trusted_domain_action: self._on_add_trusted_domain_action,
             self.on.add_missing_indices_action: self._on_add_missing_indices_action,
             self.on.convert_filecache_bigint_action: self._on_convert_filecache_bigint_action,
             self.on.maintenance_action: self._on_maintenance_action
@@ -261,35 +260,30 @@ class NextcloudCharm(CharmBase):
 
     # ACTIONS
 
-    def _on_add_trusted_domain_action(self, event):
-        pass
-
     def _on_add_missing_indices_action(self, event):
-        pass
-
-    def _on_add_missing_indices_action(self, event):
-        pass
+        o = Occ.db_add_missing_indices()
+        event.set_results({"occ-output": o})
 
     def _on_convert_filecache_bigint_action(self, event):
-        pass
+        """
+        Action to convert-filecache-bigint on the database via occ
+        This action places the site in maintenance mode to protect it
+        while this action runs.
+        """
+        Occ.maintenance(enable=True)
+        o = Occ.convert_filecache_bigint()
+        event.set_results({"occ-output": o})
+        Occ.maintenance(enable=False)
 
     def _on_maintenance_action(self, event):
         """
         Action to take the site in or out of maintenance mode.
-        :param event:
+        :param event: boolean
         :return:
         """
-        try:
-            hostname = subprocess.check_output(
-                "hostname",
-                shell=True
-            )
+        o = Occ.maintenance(enable=event.params['enable'])
+        event.set_results({"occ-output": o})
 
-            event.set_results({"maintenence": hostname})
-
-        except subprocess.CalledProcessError as e:
-            print(e)
-            sys.exit(-1)
 
     def _install_deps(self):
         """

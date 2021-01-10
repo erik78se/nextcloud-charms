@@ -1,4 +1,7 @@
 from subprocess import run, call, PIPE
+import logging
+
+logger = logging.getLogger(__name__)
 
 class Occ:
 
@@ -63,3 +66,22 @@ class Occ:
         Occ.occ_remove_all_trusted_domains()
         for index, d in enumerate(new_domains):
             Occ.occ_add_trusted_domain(d, index)
+
+    @staticmethod
+    def db_add_missing_indices():
+        cmd = "sudo -u www-data php /var/www/nextcloud/occ db:add-missing-indices"
+        output = run(cmd.split(), cwd='/var/www/nextcloud', stdout=PIPE, universal_newlines=True)
+        return output
+
+    @staticmethod
+    def convert_filecache_bigint():
+        cmd = "sudo -u www-data php /var/www/nextcloud/occ db:convert-filecache-bigint --no-interaction"
+        output = run(cmd.split(), cwd='/var/www/nextcloud', stdout=PIPE, universal_newlines=True)
+        return output
+
+    @staticmethod
+    def maintenance(enable):
+        m = "--on" if enable else "--off"
+        cmd = f"sudo -u www-data php /var/www/nextcloud/occ maintenance:mode {m}"
+        output = run(cmd.split(), cwd='/var/www/nextcloud', stdout=PIPE, universal_newlines=True)
+        return output
