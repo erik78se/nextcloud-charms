@@ -1,4 +1,4 @@
-from subprocess import run, call, PIPE
+from subprocess import run
 
 
 def _modify_port(start=None, end=None, protocol='tcp', hook_tool="open-port"):
@@ -14,6 +14,7 @@ def _modify_port(start=None, end=None, protocol='tcp', hook_tool="open-port"):
     else:
         port = ""
     run([hook_tool, f"{port}{protocol}"])
+
 
 def enable_ping():
     _modify_port(None, None, protocol='icmp', hook_tool="open-port")

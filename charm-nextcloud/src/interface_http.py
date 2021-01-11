@@ -3,6 +3,7 @@
 
 from ops.framework import Object
 
+
 class HttpProvider(Object):
     """Http interface provider interface."""
 
@@ -11,7 +12,7 @@ class HttpProvider(Object):
         """
         super().__init__(charm, relation_name)
         self._relation_name = relation_name
-        self._hostname = hostname # FQDN of host passed on in relations
+        self._hostname = hostname  # FQDN of host passed on in relations
         self._port = port
         self.framework.observe(
             charm.on[relation_name].relation_joined, self._on_relation_joined

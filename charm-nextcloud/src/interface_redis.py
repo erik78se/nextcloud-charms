@@ -45,8 +45,6 @@ class RedisClient(Object):
         if not event_unit_data:
             event.defer()
             return
-        
-        
         password = event_unit_data.get('password')
         host = event_unit_data.get('hostname')
         port = event_unit_data.get('port')
