@@ -43,3 +43,8 @@ options:
     default: '1G'
     description: >
       Setting for php
+  nextcloud-tarfile:
+    type: string
+    default: https://download.nextcloud.com/server/releases/nextcloud-18.0.3.tar.bz2
+    description: >
+      Sources for nextcloud (must be tar.bz2)

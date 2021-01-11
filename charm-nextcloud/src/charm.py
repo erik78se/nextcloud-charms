@@ -330,8 +330,8 @@ class NextcloudCharm(CharmBase):
         import requests
         import tarfile
 
-        source = 'https://download.nextcloud.com/server/releases/nextcloud-18.0.3.tar.bz2'
-
+        # source = 'https://download.nextcloud.com/server/releases/nextcloud-18.0.3.tar.bz2'
+        source = self.config.get('nextcloud-tarfile')
         checksum = '7b67e709006230f90f95727f9fa92e8c73a9e93458b22103293120f9cb50fd72'
 
         try:
