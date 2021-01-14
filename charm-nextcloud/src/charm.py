@@ -349,10 +349,10 @@ class NextcloudCharm(CharmBase):
         """
         # Adds the fqdn to trusted domains (if set)
         if self.config['fqdn']:
-            Occ.occ_add_trusted_domain(self.config['fqdn'], 1)
+            Occ.add_trusted_domain(self.config['fqdn'], 1)
         ingress_addr = self.model.get_binding('website').network.ingress_address
         # Adds the ingress_address to trusted domains
-        Occ.occ_add_trusted_domain(ingress_addr, 2)
+        Occ.add_trusted_domain(ingress_addr, 2)
 
     def _set_directory_permissions(self):
         subprocess.call("sudo chown -R www-data:www-data /var/www/nextcloud".split(),
