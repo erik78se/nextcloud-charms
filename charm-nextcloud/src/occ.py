@@ -11,9 +11,10 @@ class Occ:
         """
         Adds a trusted domain to nextcloud config.php with occ
         """
-        cmd = ("sudo -u www-data php /var/www/nextcloud/occ config:system:set "
-                                  "trusted_domains {index} "
-                                  " --value={domain} ").format(index=index, domain=domain)
+
+        cmd = ("sudo -u www-data php /var/www/nextcloud/occ config:system:set"
+               " trusted_domains {index}"
+               " --value={domain} ").format(index=index, domain=domain)
         call(cmd.split(), cwd='/var/www/nextcloud')
 
     @staticmethod
