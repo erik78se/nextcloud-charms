@@ -38,5 +38,6 @@ class TestCharm(unittest.TestCase):
     def test_fetch_sources(self):
         harness = Harness(NextcloudCharm)
         harness.begin()
-        harness.charm._fetch_and_extract_nextcloud()
+        tarfile_url = "https://download.nextcloud.com/server/releases/nextcloud-18.0.3.tar.bz2"
+        harness.charm.fetch_and_extract_nextcloud(tarfile_url)
         self.assertTrue(harness.charm._stored.nextcloud_fetched)
