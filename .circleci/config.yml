@@ -12,9 +12,10 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          build_dir: ./charm-nextcloud/
-          command: ./run_tests
-          name: Test
+          command: |
+          cd charm-nextcloud
+          ./run_tests
+          name: Test Nextcloud Charm
 
 workflows:
   main:
