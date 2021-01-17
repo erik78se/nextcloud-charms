@@ -204,7 +204,7 @@ class NextcloudCharm(CharmBase):
                 utils.set_directory_permissions()
                 self._init_nextcloud()
                 self._add_initial_trusted_domain()
-                installed = Occ.get_nextcloud_status()['installed']
+                installed = Occ.status()['installed']
                 if installed:
                     logger.debug("===== Nextcloud install_status: {}====".format(installed))
                     self._stored.nextcloud_initialized = True
@@ -233,10 +233,10 @@ class NextcloudCharm(CharmBase):
         This action places the site in maintenance mode to protect it
         while this action runs.
         """
-        Occ.maintenance(enable=True)
-        o = Occ.convert_filecache_bigint()
+        Occ.maintenance_mode(enable=True)
+        o = Occ.db_convert_filecache_bigint()
         event.set_results({"occ-output": o})
-        Occ.maintenance(enable=False)
+        Occ.maintenance_mode(enable=False)
 
     def _on_maintenance_action(self, event):
         """
@@ -244,7 +244,7 @@ class NextcloudCharm(CharmBase):
         :param event: boolean
         :return:
         """
-        o = Occ.maintenance(enable=event.params['enable'])
+        o = Occ.maintenance_mode(enable=event.params['enable'])
         event.set_results({"occ-output": o})
 
     def _config_php(self):
@@ -279,7 +279,7 @@ class NextcloudCharm(CharmBase):
                'adminusername': self.config.get('admin-username'),
                'datadir': '/var/www/nextcloud/data'
                }
-        Occ.install_nextcloud(ctx)
+        Occ.maintenance_install(ctx)
 
     def _add_initial_trusted_domain(self):
         """
@@ -290,10 +290,10 @@ class NextcloudCharm(CharmBase):
         """
         # Adds the fqdn to trusted domains (if set)
         if self.config['fqdn']:
-            Occ.add_trusted_domain(self.config['fqdn'], 1)
+            Occ.config_system_set_trusted_domains(self.config['fqdn'], 1)
         ingress_addr = self.model.get_binding('website').network.ingress_address
         # Adds the ingress_address to trusted domains
-        Occ.add_trusted_domain(ingress_addr, 2)
+        Occ.config_system_set_trusted_domains(ingress_addr, 2)
 
     def _on_update_status(self, event):
         """
@@ -316,7 +316,7 @@ class NextcloudCharm(CharmBase):
 
         else:
             if self.model.unit.is_leader():
-                self.unit.set_workload_version(Occ.get_nextcloud_status()['version'])
+                self.unit.set_workload_version(Occ.status()['version'])
             self.unit.status = ActiveStatus("Ready")
 
     def set_redis_info(self, info: dict):
