@@ -23,22 +23,19 @@ jobs:
           command: |
             pip3 install -r charm-nextcloud/requirements.txt
       - run:
-          name: "./run_test"
+          name: "Unit test (./run_test)"
           command: |
             cd charm-nextcloud
             sudo ./run_tests
       - run:
-          name: "Build charm"
+          name: "Build charm with charmcraft"
           command: |
             charmcraft build --from charm-nextcloud
       - save_cache:
-          name: "Cache the built charm and juju tar for the next workflow"
+          name: "Cache the built charm for the next workflow"
           key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
           paths:
             - nextcloud.charm
-            - .local/
-
-
 workflows:
   main:
     jobs:
