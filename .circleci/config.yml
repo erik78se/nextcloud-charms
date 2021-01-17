@@ -5,20 +5,31 @@ orbs:
 
 jobs:
   build-and-test:
-    build_directory: charm-nextcloud
     executor: python/default
     steps:
       - checkout
-      - python/load-cache
-      - python/install-deps
-      - python/save-cache
       - run:
+          name: "Install charmcraft"
+          command: |
+            pip install charmcraft
+      - run:
+          name: "./run_test"
           command: |
             cd charm-nextcloud
             ./run_tests
-          name: Test Nextcloud Charm
+      - run:
+          name: "Build charm"
+          charmcraft --from charm-nextcloud
+      - save_cache:
+          name: "Cache the built charm and juju tar for the next workflow."
+          key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - nextcloud.charm
+            - .local/
+
 
 workflows:
   main:
+    working_directory: charm-nextcloud
     jobs:
       - build-and-test
