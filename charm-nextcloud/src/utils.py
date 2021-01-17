@@ -1,11 +1,11 @@
 import subprocess as sp
 import sys
-import os
 import requests
 import tarfile
 from pathlib import Path
 import jinja2
 import io
+
 
 def _modify_port(start=None, end=None, protocol='tcp', hook_tool="open-port"):
     assert protocol in {'tcp', 'udp', 'icmp'}
@@ -21,21 +21,27 @@ def _modify_port(start=None, end=None, protocol='tcp', hook_tool="open-port"):
         port = ""
     sp.run([hook_tool, f"{port}{protocol}"])
 
+
 def enable_ping():
     _modify_port(None, None, protocol='icmp', hook_tool="open-port")
+
 
 def disable_ping():
     _modify_port(None, None, protocol='icmp', hook_tool="close-port")
 
+
 def open_port(start, end=None, protocol="tcp"):
     _modify_port(start, end, protocol=protocol, hook_tool="open-port")
+
 
 def close_port(start, end=None, protocol="tcp"):
     _modify_port(start, end, protocol=protocol, hook_tool="close-port")
 
+
 def set_directory_permissions():
     sp.call("sudo chown -R www-data:www-data /var/www/nextcloud".split(),
-                    cwd='/var/www/nextcloud')
+            cwd='/var/www/nextcloud')
+
 
 def install_dependencies():
     """
@@ -64,6 +70,7 @@ def install_dependencies():
         print(e)
         sys.exit(-1)
 
+
 def fetch_and_extract_nextcloud(tarfile_url):
     """
     Fetch and Install nextcloud from internet
@@ -79,6 +86,7 @@ def fetch_and_extract_nextcloud(tarfile_url):
     except sp.CalledProcessError as e:
         print(e)
         sys.exit(-1)
+
 
 def config_apache2(templates_path, template):
     """
@@ -98,6 +106,7 @@ def config_apache2(templates_path, template):
     # Enable nextcloud site (wich will be default)
     sp.check_call(['a2ensite', 'nextcloud'])
 
+
 def config_php(phpmod_context, templates_path, template):
     """
     Renders the phpmodule for nextcloud (nextcloud.ini)
@@ -110,6 +119,7 @@ def config_php(phpmod_context, templates_path, template):
     target = Path('/etc/php/7.2/mods-available/nextcloud.ini')
     target.write_text(template.render(phpmod_context))
     sp.check_call(['phpenmod', 'nextcloud'])
+
 
 def config_redis(redis_info, templates_path, template):
     template = jinja2.Environment(

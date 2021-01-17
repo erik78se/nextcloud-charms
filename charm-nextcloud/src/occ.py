@@ -1,6 +1,7 @@
 import subprocess as sp
 import logging
 import json
+import sys
 
 logger = logging.getLogger(__name__)
 
@@ -49,7 +50,7 @@ class Occ:
         cmd = "sudo -u www-data php /var/www/nextcloud/occ \
                            config:system:get trusted_domains"
         output = sp.run(cmd.split(), cwd='/var/www/nextcloud',
-                     stdout=sp.PIPE, universal_newlines=True)
+                        stdout=sp.PIPE, universal_newlines=True)
         domains = output.stdout.split()
         return domains
 
@@ -66,21 +67,24 @@ class Occ:
     @staticmethod
     def db_add_missing_indices():
         cmd = "sudo -u www-data php /var/www/nextcloud/occ db:add-missing-indices"
-        output = sp.run(cmd.split(), cwd='/var/www/nextcloud', stdout=sp.PIPE, universal_newlines=True)
+        output = sp.run(cmd.split(), cwd='/var/www/nextcloud',
+                        stdout=sp.PIPE, universal_newlines=True)
         return output
 
     @staticmethod
     def db_convert_filecache_bigint():
         cmd = "sudo -u www-data php /var/www/nextcloud/occ \
                db:convert-filecache-bigint --no-interaction"
-        output = sp.run(cmd.split(), cwd='/var/www/nextcloud', stdout=sp.PIPE, universal_newlines=True)
+        output = sp.run(cmd.split(), cwd='/var/www/nextcloud',
+                        stdout=sp.PIPE, universal_newlines=True)
         return output
 
     @staticmethod
     def maintenance_mode(enable):
         m = "--on" if enable else "--off"
         cmd = f"sudo -u www-data php /var/www/nextcloud/occ maintenance:mode {m}"
-        output = sp.run(cmd.split(), cwd='/var/www/nextcloud', stdout=sp.PIPE, universal_newlines=True)
+        output = sp.run(cmd.split(), cwd='/var/www/nextcloud',
+                        stdout=sp.PIPE, universal_newlines=True)
         return output
 
     @staticmethod
@@ -90,11 +94,11 @@ class Occ:
         :return:
         """
         cmd = ("sudo -u www-data /usr/bin/php occ maintenance:install "
-                          "--database {dbtype} --database-name {dbname} "
-                          "--database-host {dbhost} --database-pass {dbpass} "
-                          "--database-user {dbuser} --admin-user {adminusername} "
-                          "--admin-pass {adminpassword} "
-                          "--data-dir {datadir} ").format(**ctx)
+               "--database {dbtype} --database-name {dbname} "
+               "--database-host {dbhost} --database-pass {dbpass} "
+               "--database-user {dbuser} --admin-user {adminusername} "
+               "--admin-pass {adminpassword} "
+               "--data-dir {datadir} ").format(**ctx)
         sp.call(cmd.split(), cwd='/var/www/nextcloud')
 
     @staticmethod
@@ -105,9 +109,9 @@ class Occ:
         cmd = "sudo -u www-data /usr/bin/php occ status --output=json --no-warnings"
         try:
             output = sp.run(cmd.split(),
-                                    stdout=sp.PIPE,
-                                    cwd='/var/www/nextcloud',
-                                    universal_newlines=True).stdout
+                            stdout=sp.PIPE,
+                            cwd='/var/www/nextcloud',
+                            universal_newlines=True).stdout
             returndict = json.loads(output.split()[-1])
         except sp.CalledProcessError as e:
             print(e)

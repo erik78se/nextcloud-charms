@@ -324,7 +324,8 @@ class NextcloudCharm(CharmBase):
         utils.config_redis(info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
     def _on_redis_available(self, event):
-        utils.config_redis(self._stored.redis_info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
+        utils.config_redis(self._stored.redis_info,
+                           Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
 
 if __name__ == "__main__":
