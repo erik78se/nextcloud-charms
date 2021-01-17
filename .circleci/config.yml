@@ -5,6 +5,8 @@ orbs:
 
 jobs:
   build-and-test:
+    - run: pwd
+    working_directory: charm-nextcloud
     executor: python/default
     steps:
       - checkout
