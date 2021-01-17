@@ -35,9 +35,9 @@ class TestCharm(unittest.TestCase):
     #
     #     self.assertEqual(action_event.fail.call_args, [("fail this",)])
 
-    def test_fetch_sources(self):
+    def test_on_install(self):
         harness = Harness(NextcloudCharm)
         harness.begin()
-        tarfile_url = "https://download.nextcloud.com/server/releases/nextcloud-18.0.3.tar.bz2"
-        harness.charm.fetch_and_extract_nextcloud(tarfile_url)
-        self.assertTrue(harness.charm._stored.nextcloud_fetched)
+        harness.begin_with_initial_hooks()
+        # harness.charm._on_install()
+        # self.assertTrue(harness.charm._stored.nextcloud_fetched)
