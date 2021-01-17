@@ -35,8 +35,9 @@ class TestCharm(unittest.TestCase):
     #
     #     self.assertEqual(action_event.fail.call_args, [("fail this",)])
 
-    def test_fetch_sources(self):
+    def test_leader_install_hook(self):
         harness = Harness(NextcloudCharm)
+        harness.set_leader(True)
         harness.begin()
-        harness.charm._fetch_and_extract_nextcloud()
-        self.assertTrue(harness.charm._stored.nextcloud_fetched)
+        harness.charm.on.install.emit()
+        # self.assertTrue(harness.charm._stored.nextcloud_fetched)
