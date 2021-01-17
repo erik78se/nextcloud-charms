@@ -5,39 +5,37 @@ orbs:
 
 jobs:
   build-and-test:
-
     machine:
-      - image: ubuntu-2004:202010-01
-
-    steps:
-      - checkout
-      - run:
-          name: "apt update"
-          command: |
-            sudo apt update
-      - run:
-          name: "Install requirements-dev.txt"
-          command: |
-            pip install -r charm-nextcloud/requirements-dev.txt
-      - run:
-          name: "Install requirements.txt"
-          command: |
-            pip install -r charm-nextcloud/requirements.txt
-      - run:
-          name: "./run_test"
-          command: |
-            cd charm-nextcloud
-            ./run_tests
-      - run:
-          name: "Build charm"
-          command: |
-            charmcraft --from charm-nextcloud
-      - save_cache:
-          name: "Cache the built charm and juju tar for the next workflow"
-          key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
-          paths:
-            - nextcloud.charm
-            - .local/
+      image: ubuntu-2004:202010-01
+      steps:
+        - checkout
+        - run:
+            name: "apt update"
+            command: |
+              sudo apt update
+        - run:
+            name: "Install requirements-dev.txt"
+            command: |
+              pip install -r charm-nextcloud/requirements-dev.txt
+        - run:
+            name: "Install requirements.txt"
+            command: |
+              pip install -r charm-nextcloud/requirements.txt
+        - run:
+            name: "./run_test"
+            command: |
+              cd charm-nextcloud
+              ./run_tests
+        - run:
+            name: "Build charm"
+            command: |
+              charmcraft --from charm-nextcloud
+        - save_cache:
+            name: "Cache the built charm and juju tar for the next workflow"
+            key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
+            paths:
+              - nextcloud.charm
+              - .local/
 
 
 workflows:
