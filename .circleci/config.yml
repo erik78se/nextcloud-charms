@@ -19,7 +19,8 @@ jobs:
             ./run_tests
       - run:
           name: "Build charm"
-          charmcraft --from charm-nextcloud
+          command: |
+            charmcraft --from charm-nextcloud
       - save_cache:
           name: "Cache the built charm and juju tar for the next workflow."
           key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
