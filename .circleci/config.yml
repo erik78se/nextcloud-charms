@@ -21,7 +21,7 @@ jobs:
       - run:
           name: "Check code quality with flake8"
           command: |
-            python3 -m flake8 charm-nextcloud/
+            python3 -m flake8 --ignore E501 charm-nextcloud/
       - run:
           name: "Install requirements.txt"
           command: |
