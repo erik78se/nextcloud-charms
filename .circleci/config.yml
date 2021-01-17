@@ -10,13 +10,17 @@ jobs:
     steps:
       - checkout
       - run:
+            name: "Install pip3"
+            command: |
+              sudo apt-get install python3-pip
+      - run:
           name: "Install requirements-dev.txt"
           command: |
-            pip install -r charm-nextcloud/requirements-dev.txt
+            pip3 install -r charm-nextcloud/requirements-dev.txt
       - run:
           name: "Install requirements.txt"
           command: |
-            pip install -r charm-nextcloud/requirements.txt
+            pip3 install -r charm-nextcloud/requirements.txt
       - run:
           name: "./run_test"
           command: |
