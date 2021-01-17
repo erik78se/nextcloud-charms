@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright 2020 Erik Lönroth
+# Copyright 2021 Joakim Nyman
 # See LICENSE file for licensing details.
 
 import logging
@@ -35,8 +35,7 @@ pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 NEXTCLOUD_ROOT = os.path.abspath('/var/www/nextcloud')
 NEXTCLOUD_CONFIG_PHP = os.path.abspath('/var/www/nextcloud/config/config.php')
 
-
-class NextcloudCharm(CharmBase):
+class NextcloudPrivateCharm(CharmBase):
     _stored = StoredState()
 
     def __init__(self, *args):
@@ -56,14 +55,9 @@ class NextcloudCharm(CharmBase):
             self.on.install: self._on_install,
             self.on.config_changed: self._on_config_changed,
             self.on.start: self._on_start,
-            self.on.leader_elected: self._on_leader_elected,
             self.db.on.database_relation_joined: self._on_database_relation_joined,
             self.db.on.master_changed: self._on_master_changed,
-            self.on.update_status: self._on_update_status,
-            self.on.cluster_relation_changed: self._on_cluster_relation_changed,
-            self.on.cluster_relation_joined: self._on_cluster_relation_joined,
-            self.on.cluster_relation_departed: self._on_cluster_relation_departed,
-            self.on.cluster_relation_broken: self._on_cluster_relation_broken
+            self.on.update_status: self._on_update_status
         }
 
         # REDIS
@@ -120,59 +114,6 @@ class NextcloudCharm(CharmBase):
             # becomes leader and needs to perform that operation.
             event.defer()
             return
-
-    # Only leader is running this hook (verify this)
-    def _on_leader_elected(self, event):
-        logger.debug("!!!!!!!!new leader!!!!!!!!")
-        self.framework.breakpoint('leader')
-        self.update_config_php_trusted_domains()
-
-    def update_config_php_trusted_domains(self):
-        if not os.path.exists(NEXTCLOUD_CONFIG_PHP):
-            return
-        self.framework.breakpoint('trusted')
-        cluster_rel = self.model.relations['cluster'][0]
-        rel_unit_ip = [cluster_rel.data[u]['ingress-address'] for u in cluster_rel.units]
-        this_unit_ip = cluster_rel.data[self.model.unit]['ingress-address']
-        rel_unit_ip.append(this_unit_ip)
-        Occ.update_trusted_domains_peer_ips(rel_unit_ip)
-        with open(NEXTCLOUD_CONFIG_PHP) as f:
-            nextcloud_config = f.read()
-            cluster_rel.data[self.app]['nextcloud_config'] = str(nextcloud_config)
-
-    def _on_cluster_relation_joined(self, event):
-        if self.model.unit.is_leader():
-            if not self._stored.nextcloud_initialized:
-                event.defer()
-                return
-            self.framework.breakpoint('joined')
-            self.update_config_php_trusted_domains()
-
-    def _on_cluster_relation_changed(self, event):
-        if not self.model.unit.is_leader():
-            if 'nextcloud_config' not in event.relation.data[self.app]:
-                event.defer()
-                return
-            nextcloud_config = nextcloud_config = event.relation.data[self.app]['nextcloud_config']
-            with open(NEXTCLOUD_CONFIG_PHP, "w") as f:
-                f.write(nextcloud_config)
-            data_dir_path = os.path.join(NEXTCLOUD_ROOT, 'data')
-            ocdata_path = os.path.join(data_dir_path, '.ocdata')
-            if not os.path.exists(data_dir_path):
-                os.mkdir(data_dir_path)
-            if not os.path.exists(ocdata_path):
-                open(ocdata_path, 'a').close()
-            utils.set_directory_permissions()
-            self._stored.database_available = True
-            self._stored.nextcloud_initialized = True
-
-    def _on_cluster_relation_departed(self, event):
-        self.framework.breakpoint('departed')
-        if self.model.unit.is_leader():
-            self.update_config_php_trusted_domains()
-
-    def _on_cluster_relation_broken(self, event):
-        pass
 
     def _on_master_changed(self, event: pgsql.MasterChangedEvent):
         if event.database != 'nextcloud':
@@ -325,9 +266,8 @@ class NextcloudCharm(CharmBase):
         utils.config_redis(info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
     def _on_redis_available(self, event):
-        utils.config_redis(self._stored.redis_info,
-                           Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
+        utils.config_redis(self._stored.redis_info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
 
 if __name__ == "__main__":
-    main(NextcloudCharm)
+    main(NextcloudPrivateCharm)
