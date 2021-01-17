@@ -13,8 +13,8 @@ jobs:
       - python/save-cache
       - run:
           command: |
-          cd charm-nextcloud
-          ./run_tests
+            cd charm-nextcloud
+            ./run_tests
           name: Test Nextcloud Charm
 
 workflows:
