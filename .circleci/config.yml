@@ -12,6 +12,10 @@ jobs:
     steps:
       - checkout
       - run:
+          name: "apt update"
+          command: |
+            apt update
+      - run:
           name: "Install requirements-dev.txt"
           command: |
             pip install -r charm-nextcloud/requirements-dev.txt
