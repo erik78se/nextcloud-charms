@@ -31,6 +31,5 @@ jobs:
 
 workflows:
   main:
-    working_directory: charm-nextcloud
     jobs:
       - build-and-test
