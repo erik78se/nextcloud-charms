@@ -57,7 +57,7 @@ def install_dependencies():
                     'php-apcu',
                     'php-redis',
                     'php-smbclient']
-        command = ["apt", "install", "-y"]
+        command = ["sudo", "apt", "install", "-y"]
         command.extend(packages)
         sp.run(command, check=True)
     except sp.CalledProcessError as e:
