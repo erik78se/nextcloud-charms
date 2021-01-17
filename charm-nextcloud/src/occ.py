@@ -8,7 +8,7 @@ logger = logging.getLogger(__name__)
 class Occ:
 
     @staticmethod
-    def add_trusted_domain(domain, index):
+    def config_system_set_trusted_domains(domain, index):
         """
         Adds a trusted domain to nextcloud config.php with occ
         """
@@ -21,27 +21,27 @@ class Occ:
     @staticmethod
     def remove_trusted_domain(domain):
         """
-        Removes a trused domain from nextcloud with occ
+        Removes a trusted domain from nextcloud with occ
         """
-        current_domains = Occ.get_trusted_domains()
+        current_domains = Occ.config_system_get_trusted_domains()
         if domain in current_domains:
             current_domains.remove(domain)
             # First delete all trusted domains from config.php
             # since they might have indices not in order.
-            Occ.remove_all_trusted_domains()
+            Occ.config_system_delete_trusted_domains()
             if current_domains:
                 # Now, add all the domains with indices in order starting from 0
                 for index, domain in enumerate(current_domains):
-                    Occ.add_trusted_domain(domain, index)
+                    Occ.config_system_set_trusted_domains(domain, index)
 
     @staticmethod
-    def remove_all_trusted_domains():
+    def config_system_delete_trusted_domains():
         cmd = "sudo -u www-data php /var/www/nextcloud/occ \
                                   config:system:delete trusted_domains"
         sp.run(cmd.split(), cwd='/var/www/nextcloud')
 
     @staticmethod
-    def get_trusted_domains():
+    def config_system_get_trusted_domains():
         """
         Get all current trusted domains in config.php with occ
         return list
@@ -55,13 +55,13 @@ class Occ:
 
     @staticmethod
     def update_trusted_domains_peer_ips(domains):
-        current_domains = Occ.get_trusted_domains()
+        current_domains = Occ.config_system_get_trusted_domains()
         # Copy 'localhost' and fqdn but replace all peers IP:s
         # with the ones currently available in the relation.
         new_domains = current_domains[0:2] + domains[:]
-        Occ.remove_all_trusted_domains()
+        Occ.config_system_delete_trusted_domains()
         for index, d in enumerate(new_domains):
-            Occ.add_trusted_domain(d, index)
+            Occ.config_system_set_trusted_domains(d, index)
 
     @staticmethod
     def db_add_missing_indices():
@@ -70,21 +70,21 @@ class Occ:
         return output
 
     @staticmethod
-    def convert_filecache_bigint():
+    def db_convert_filecache_bigint():
         cmd = "sudo -u www-data php /var/www/nextcloud/occ \
                db:convert-filecache-bigint --no-interaction"
         output = sp.run(cmd.split(), cwd='/var/www/nextcloud', stdout=sp.PIPE, universal_newlines=True)
         return output
 
     @staticmethod
-    def maintenance(enable):
+    def maintenance_mode(enable):
         m = "--on" if enable else "--off"
         cmd = f"sudo -u www-data php /var/www/nextcloud/occ maintenance:mode {m}"
         output = sp.run(cmd.split(), cwd='/var/www/nextcloud', stdout=sp.PIPE, universal_newlines=True)
         return output
 
     @staticmethod
-    def install_nextcloud(ctx):
+    def maintenance_install(ctx):
         """
         Initializes nextcloud via the nextcloud occ interface.
         :return:
@@ -98,7 +98,7 @@ class Occ:
         sp.call(cmd.split(), cwd='/var/www/nextcloud')
 
     @staticmethod
-    def get_nextcloud_status() -> dict:
+    def status() -> dict:
         """
         Return dict with nextcloud status.
         """
