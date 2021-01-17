@@ -9,9 +9,9 @@ jobs:
     steps:
       - checkout
       - run:
-          name: "Install charmcraft"
+          name: "Install requirements-dev.txt"
           command: |
-            pip install charmcraft
+            pip install -r charm-nextcloud/requirements-dev.txt
       - run:
           name: "./run_test"
           command: |
