@@ -12,7 +12,8 @@ jobs:
       - python/install-deps
       - python/save-cache
       - run:
-          command: ./charm-nextcloud/run_tests
+          build_dir: ./charm-nextcloud/
+          command: ./run_tests
           name: Test
 
 workflows:
