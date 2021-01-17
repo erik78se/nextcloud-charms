@@ -1,0 +1,21 @@
+# Copyright 2021 Joakim Nyman
+# See LICENSE file for licensing details.
+name: nextcloud-private
+description: |
+  Nextcloud goes here
+summary: |
+  Docs goes here
+series: [bionic, focal]
+
+
+provides:
+  website:
+    interface: http
+
+requires:
+  db:
+    interface: pgsql
+
+  redis:
+    interface: redis
+    optional: true

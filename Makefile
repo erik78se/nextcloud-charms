@@ -10,7 +10,12 @@ clean: ## Remove .tox and build dirs
 	rm -rf *.charm
 
 build: ## Build nextcloud charm
+	(cd charm-nextcloud && charmcraft fetch-lib charms.nextcloud-private.v0.occ)
+	(cd charm-nextcloud && charmcraft fetch-lib charms.nextcloud-private.v0.utils)
 	@charmcraft build --from charm-nextcloud
+
+build-private: ## Build nextcloud private charm
+	@charmcraft build --from charm-nextcloud-private
 
 push-nextcloud-to-edge: ## Push charms to edge s3
 	@./scripts/push_charm.sh edge
