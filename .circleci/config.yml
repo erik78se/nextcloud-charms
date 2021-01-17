@@ -19,6 +19,10 @@ jobs:
           command: |
             pip3 install -r charm-nextcloud/requirements-dev.txt
       - run:
+          name: "Check code quality with flake8"
+          command: |
+            python3 -m flake8 charm-nextcloud/
+      - run:
           name: "Install requirements.txt"
           command: |
             pip3 install -r charm-nextcloud/requirements.txt
