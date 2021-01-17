@@ -6,8 +6,8 @@ orbs:
 jobs:
   build-and-test:
 
-    docker:
-      - image: circleci/python:3.8
+    machine:
+      - image: ubuntu-2004:202010-01
 
     steps:
       - checkout
