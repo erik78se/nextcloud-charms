@@ -26,7 +26,7 @@ jobs:
           name: "./run_test"
           command: |
             cd charm-nextcloud
-            ./run_tests
+            sudo ./run_tests
       - run:
           name: "Build charm"
           command: |
