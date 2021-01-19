@@ -4,6 +4,7 @@ import unittest
 import threading
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 
+
 class TestUtils(unittest.TestCase):
     """
     Unittests for utils functions
@@ -21,8 +22,10 @@ class TestUtils(unittest.TestCase):
         self.httpd_thread.daemon = True
         self.httpd_thread.start()
 
+
     def tearDown(self) -> None:
         pass
+
 
     def test_fetch_and_extract_nextcloud(self) -> None:
         """
