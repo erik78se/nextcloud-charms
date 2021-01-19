@@ -25,6 +25,6 @@ storage:
     type: filesystem
     description: Nextcloud data directory.
     minimum-size: 100M
-    location: /nextcloud/data # Will be used instead of /var/www/nextcloud/data
+    location: /nextcloud/data
     multiple:
       range: 0-1
