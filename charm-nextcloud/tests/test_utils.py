@@ -4,6 +4,7 @@ import unittest
 import threading
 from http.server import SimpleHTTPRequestHandler, HTTPServer
 
+
 class TestUtils(unittest.TestCase):
     """
     Unittests for utils functions
@@ -29,6 +30,7 @@ class TestUtils(unittest.TestCase):
         Test fetching a tarfile containing an empty nextcloud and extract it.
         """
         utils.fetch_and_extract_nextcloud('http://localhost:8081/nextcloud.tar.bz2')
+
 
 if __name__ == '__main__':
     unittest.main()
