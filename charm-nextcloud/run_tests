@@ -13,4 +13,4 @@ else
 fi
 
 python3 -m flake8 --ignore E501 -v "$@"
-python3 -m unittpython3 -m flake8 --ignore E501 -v "$@"est -v "$@"
+python3 -m unittest -v "$@"
