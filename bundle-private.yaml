@@ -6,37 +6,22 @@ applications:
     to:
     - "1"
   nextcloud:
-    charm: ./nextcloud.charm
-    num_units: 3
-    to:
-    - "2"
-    - "3"
-    - "4"
+    charm: ./nextcloud-private.charm
+    num_units: 1
     options:
-      fqdn: nextcloud.example.net
+      fqdn: "nextcloud.example.net"
+    to:
+    - "0"
   postgresql:
     charm: cs:postgresql-215
     num_units: 1
     to:
     - "0"
-  redis:
-    charm: cs:trusty/redis-0
-    series: trusty
-    num_units: 1
-    to:
-    - "5"
 machines:
   "0": {}
   "1": {}
-  "2": {}
-  "3": {}
-  "4": {}
-  "5":
-    series: trusty
 relations:
 - - postgresql:db
   - nextcloud:db
 - - haproxy:reverseproxy
   - nextcloud:website
-- - redis:db
-  - nextcloud:redis

@@ -9,8 +9,16 @@ clean: ## Remove .tox and build dirs
 	rm -rf venv/
 	rm -rf *.charm
 
-build: ## Build nextcloud charm
+## Build nextcloud charm
+build: build-lib
 	@charmcraft build --from charm-nextcloud
+
+## Build nextcloud private charm
+build-private: build-lib
+	@charmcraft build --from charm-nextcloud-private
+
+build-lib:
+	cd lib && python3 setup.py bdist_wheel
 
 push-nextcloud-to-edge: ## Push charms to edge s3
 	@./scripts/push_charm.sh edge
