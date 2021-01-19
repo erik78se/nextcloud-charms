@@ -22,16 +22,15 @@ class TestUtils(unittest.TestCase):
         self.httpd_thread.daemon = True
         self.httpd_thread.start()
 
-
     def tearDown(self) -> None:
         pass
-
 
     def test_fetch_and_extract_nextcloud(self) -> None:
         """
         Test fetching a tarfile containing an empty nextcloud and extract it.
         """
         utils.fetch_and_extract_nextcloud('http://localhost:8081/nextcloud.tar.bz2')
+
 
 if __name__ == '__main__':
     unittest.main()

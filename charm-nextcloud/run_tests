@@ -12,4 +12,5 @@ else
     export PYTHONPATH="src:$PYTHONPATH"
 fi
 
+flake8 --ignore E501
 python3 -m unittest -v "$@"
