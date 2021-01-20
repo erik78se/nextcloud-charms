@@ -15,6 +15,10 @@ jobs:
               sudo apt update
               sudo apt-get install python3-pip
       - run:
+          name: "Build python lib"
+          command: |
+            make build-lib
+      - run:
           name: "Install requirements-dev.txt"
           command: |
             pip3 install -r charm-nextcloud/requirements-dev.txt
