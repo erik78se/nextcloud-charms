@@ -1,5 +1,5 @@
 import os
-import utils
+from nextcloud import utils
 import unittest
 import threading
 from http.server import SimpleHTTPRequestHandler, HTTPServer
