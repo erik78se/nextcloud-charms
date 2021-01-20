@@ -58,7 +58,7 @@ class NextcloudPrivateCharm(CharmBase):
             self.on.start: self._on_start,
             self.db.on.database_relation_joined: self._on_database_relation_joined,
             self.db.on.master_changed: self._on_master_changed,
-            self.on.update_status: self._on_update_status
+            self.on.update_status: self._on_update_status,
             self.on.['data'].storage_attached: self._on_data_storage_attached
         }
 
@@ -90,8 +90,8 @@ class NextcloudPrivateCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Sources installed")
             self._stored.nextcloud_fetched = True
 
-        if ( self._stored.nextcloud_fetched and self._stored.local_storage_attached ):
-            sp.check_call('systemctl', 'start', 'var-www-nextcloud-data.mount')
+        if self._stored.nextcloud_fetched and self._stored.local_storage_attached:
+            sp.check_call(['systemctl', 'start', 'var-www-nextcloud-data.mount'])
 
     def _on_config_changed(self, event):
         """
@@ -273,17 +273,16 @@ class NextcloudPrivateCharm(CharmBase):
     def _on_redis_available(self, event):
         utils.config_redis(self._stored.redis_info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
-    def install_mount_unitfile(self) -> None:
+    def install_mount_unitfile(self):
         """
         Install unitfile for mounting data dir.
-        :return: None
         """
-        shutil.copyfile('templates/etc/systemd/system/var-www-nextcloud-data.mount',
-                    '/etc/systemd/system/')
-        sp.check_call('systemctl', 'daemon-reload')
+        shutil.copyfile('templates/etc/systemd/system/var-www-nextcloud-data.mount', '/etc/systemd/system/')
+        sp.check_call(['systemctl', 'daemon-reload'])
 
     def _on_data_storage_attached(self, event):
-        """ Local storage is managed by Juju, so we can just pass on the
+        """
+        Local storage is managed by Juju, so we can just pass on the
         This happens normally after the install hook.
         Don't allow attaching storage after deploy.
         StorageAttachedEvent and Juju has taken care of the rest.
