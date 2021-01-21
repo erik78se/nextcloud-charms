@@ -1,7 +1,3 @@
-#!/usr/bin/env python3
-# Copyright 2021 Joakim Nyman
-# See LICENSE file for licensing details.
-
 import logging
 import shutil
 import subprocess as sp
@@ -36,6 +32,7 @@ pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 NEXTCLOUD_ROOT = os.path.abspath('/var/www/nextcloud')
 NEXTCLOUD_CONFIG_PHP = os.path.abspath('/var/www/nextcloud/config/config.php')
 
+
 class NextcloudPrivateCharm(CharmBase):
     _stored = StoredState()
 
@@ -59,7 +56,7 @@ class NextcloudPrivateCharm(CharmBase):
             self.db.on.database_relation_joined: self._on_database_relation_joined,
             self.db.on.master_changed: self._on_master_changed,
             self.on.update_status: self._on_update_status,
-            self.on.['data'].storage_attached: self._on_data_storage_attached
+            self.on.data_storage_attached: self._on_data_storage_attached
         }
 
         # REDIS
@@ -271,13 +268,15 @@ class NextcloudPrivateCharm(CharmBase):
         utils.config_redis(info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
     def _on_redis_available(self, event):
-        utils.config_redis(self._stored.redis_info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
+        utils.config_redis(self._stored.redis_info,
+                           Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
     def install_mount_unitfile(self):
         """
         Install unitfile for mounting data dir.
         """
-        shutil.copyfile('templates/etc/systemd/system/var-www-nextcloud-data.mount', '/etc/systemd/system/')
+        shutil.copyfile('templates/etc/systemd/system/var-www-nextcloud-data.mount',
+                        '/etc/systemd/system/')
         sp.check_call(['systemctl', 'daemon-reload'])
 
     def _on_data_storage_attached(self, event):
@@ -288,18 +287,19 @@ class NextcloudPrivateCharm(CharmBase):
         StorageAttachedEvent and Juju has taken care of the rest.
         """
         self._stored.local_storage_attached = True
-        if self._stored.nextcloud_initialized :
+        if self._stored.nextcloud_initialized:
             self.unit.status = BlockedStatus("Adding storage after installation is now supported.")
         else:
             self.unit.status = MaintenanceStatus("Adding local data storage.")
             self.install_mount_unitfile()
 
- def _on_data_storage_detaching(self, event):
-        """
-        Remove the local storage flag.
-        """
-        self.unit.status = MaintenanceStatus("Removed data storage.")
-        self._stored.local_storage_attached = False
+
+def _on_data_storage_detaching(self, event):
+    """
+    Remove the local storage flag.
+    """
+    self.unit.status = MaintenanceStatus("Removed data storage.")
+    self._stored.local_storage_attached = False
 
 
 if __name__ == "__main__":

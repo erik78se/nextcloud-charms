@@ -1,9 +1,7 @@
-# Copyright 2021 Joakim Nyman
+# Copyright 2021 Joakim Nyman, Erik Lönroth
 # See LICENSE file for licensing details.
 
 import unittest
-#from unittest.mock import Mock
-
 from ops.testing import Harness
 from charm import NextcloudPrivateCharm
 

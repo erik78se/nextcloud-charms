@@ -44,7 +44,50 @@ jobs:
           key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
           paths:
             - nextcloud.charm
+
+  build-and-test-private:
+    docker:
+      - image: cimg/base:stable-18.04
+    steps:
+      - checkout
+      - run:
+          name: "Install pip3"
+          command: |
+            sudo apt update
+            sudo apt-get install python3-pip
+      - run:
+          name: "Build python lib"
+          command: |
+            make build-lib
+      - run:
+          name: "Install requirements-dev.txt"
+          command: |
+            pip3 install -r charm-nextcloud-private/requirements-dev.txt
+      - run:
+          name: "Check code quality with flake8"
+          command: |
+            python3 -m flake8 --ignore E501 charm-nextcloud-private/
+      - run:
+          name: "Install requirements.txt"
+          command: |
+            pip3 install -r charm-nextcloud-private/requirements.txt
+      - run:
+          name: "Unit test (./run_test)"
+          command: |
+            cd charm-nextcloud-private
+            sudo ./run_tests
+      - run:
+          name: "Build charm with charmcraft"
+          command: |
+            charmcraft build --from charm-nextcloud-private
+      - save_cache:
+          name: "Cache the built charm for the next workflow"
+          key: nextcloud-{{ .Environment.CIRCLE_SHA1 }}
+          paths:
+            - nextcloud.charm
+
 workflows:
   main:
     jobs:
-      - build-and-test
+      # - build-and-test
+      - build-and-test-private
