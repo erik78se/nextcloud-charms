@@ -17,7 +17,8 @@ from ops.lib import use
 from ops.model import (
     ActiveStatus,
     BlockedStatus,
-    MaintenanceStatus
+    MaintenanceStatus,
+    ModelError
 )
 
 from nextcloud import utils
@@ -90,7 +91,11 @@ class NextcloudCharm(CharmBase):
         if not self._stored.nextcloud_fetched:
             # Fetch nextcloud to /var/www/
             self.unit.status = MaintenanceStatus("Begin fetching sources.")
-            utils.fetch_and_extract_nextcloud(self.config.get('nextcloud-tarfile'))
+            try:
+                tarfile_path = self.model.resources.fetch('nextcloud-tarfile')
+                utils.extract_nextcloud(tarfile_path)
+            except ModelError:
+                utils.fetch_and_extract_nextcloud(self.config.get('nextcloud-tarfile'))
             self.unit.status = MaintenanceStatus("Sources installed")
             self._stored.nextcloud_fetched = True
 

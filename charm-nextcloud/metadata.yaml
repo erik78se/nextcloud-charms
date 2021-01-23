@@ -23,3 +23,9 @@ requires:
 peers:
   cluster:
     interface: nextcloud-cluster
+
+resources:
+  nextcloud-tarfile:
+    type: file
+    filename: nextcloud.tar.bz2
+    description: Nextcloud tar file to use instead of downloading it.
