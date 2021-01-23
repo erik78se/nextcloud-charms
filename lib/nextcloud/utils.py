@@ -87,6 +87,13 @@ def fetch_and_extract_nextcloud(tarfile_url):
         print(e)
         sys.exit(-1)
 
+def extract_nextcloud(tarfile_path):
+    """
+    Install nextcloud from tarfile
+    """
+    dst = Path('/var/www/')
+    with tarfile.open(tarfile_path, mode='r:bz2') as tfile:
+        tfile.extractall(path=dst)
 
 def config_apache2(templates_path, template):
     """
