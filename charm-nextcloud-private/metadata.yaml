@@ -20,6 +20,7 @@ requires:
     interface: redis
     optional: true
 
+
 storage:
   data:
     type: filesystem
@@ -28,3 +29,9 @@ storage:
     location: /nextcloud/data
     multiple:
       range: 0-1
+
+resources:
+  nextcloud-tarfile:
+    type: file
+    filename: nextcloud.tar.bz2
+    description: Nextcloud tar file to use instead of downloading it.
