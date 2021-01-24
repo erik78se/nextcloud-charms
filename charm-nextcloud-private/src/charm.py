@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-# Copyright 2021 Joakim Nyman
+# Copyright 2020 Erik Lönroth
 # See LICENSE file for licensing details.
 
 import logging
+import shutil
 import subprocess as sp
 import sys
 import os
@@ -14,12 +15,8 @@ from ops.main import main
 from ops.framework import StoredState
 from ops.lib import use
 
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    MaintenanceStatus,
-    ModelError
-)
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus, ModelError
+
 
 from nextcloud import utils
 from nextcloud.occ import Occ
@@ -36,6 +33,7 @@ pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 NEXTCLOUD_ROOT = os.path.abspath('/var/www/nextcloud')
 NEXTCLOUD_CONFIG_PHP = os.path.abspath('/var/www/nextcloud/config/config.php')
 
+
 class NextcloudPrivateCharm(CharmBase):
     _stored = StoredState()
 
@@ -44,7 +42,7 @@ class NextcloudPrivateCharm(CharmBase):
         self.db = pgsql.PostgreSQLClient(self, 'db')  # 'db' relation in metadata.yaml
         # The website provider takes care of incoming relations on the http interface.
         self.website = HttpProvider(self, 'website', socket.getfqdn(), 80)
-        self._stored.set_default(data_dir='/var/www/nextcloud/data/',
+        self._stored.set_default(local_storage_attached=False,
                                  nextcloud_fetched=False,
                                  nextcloud_initialized=False,
                                  database_available=False,
@@ -58,7 +56,8 @@ class NextcloudPrivateCharm(CharmBase):
             self.on.start: self._on_start,
             self.db.on.database_relation_joined: self._on_database_relation_joined,
             self.db.on.master_changed: self._on_master_changed,
-            self.on.update_status: self._on_update_status
+            self.on.update_status: self._on_update_status,
+            self.on.data_storage_attached: self._on_data_storage_attached
         }
 
         # REDIS
@@ -92,6 +91,9 @@ class NextcloudPrivateCharm(CharmBase):
                 utils.fetch_and_extract_nextcloud(self.config.get('nextcloud-tarfile'))
             self.unit.status = MaintenanceStatus("Sources installed")
             self._stored.nextcloud_fetched = True
+
+        if self._stored.nextcloud_fetched and self._stored.local_storage_attached:
+            sp.check_call(['systemctl', 'start', 'var-www-nextcloud-data.mount'])
 
     def _on_config_changed(self, event):
         """
@@ -249,6 +251,9 @@ class NextcloudPrivateCharm(CharmBase):
         if not self._stored.nextcloud_fetched:
             self.unit.status = BlockedStatus("Nextcloud not fetched.")
 
+        elif not self._stored.database_available:
+            self.unit.status = BlockedStatus("No database available.")
+
         elif not self._stored.nextcloud_initialized:
             self.unit.status = BlockedStatus("Nextcloud not initialized.")
 
@@ -257,9 +262,6 @@ class NextcloudPrivateCharm(CharmBase):
 
         elif not self._stored.php_configured:
             self.unit.status = BlockedStatus("PHP not configured.")
-
-        elif not self._stored.database_available:
-            self.unit.status = BlockedStatus("No database.")
 
         else:
             if self.model.unit.is_leader():
@@ -271,7 +273,38 @@ class NextcloudPrivateCharm(CharmBase):
         utils.config_redis(info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
 
     def _on_redis_available(self, event):
-        utils.config_redis(self._stored.redis_info, Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
+        utils.config_redis(self._stored.redis_info,
+                           Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
+
+    def install_mount_unitfile(self):
+        """
+        Install unitfile for mounting data dir.
+        """
+        shutil.copyfile('templates/etc/systemd/system/var-www-nextcloud-data.mount',
+                        '/etc/systemd/system/var-www-nextcloud-data.mount')
+        sp.check_call(['systemctl', 'daemon-reload'])
+
+    def _on_data_storage_attached(self, event):
+        """
+        Local storage is managed by Juju, so we can just pass on the
+        This happens normally after the install hook.
+        Don't allow attaching storage after deploy.
+        StorageAttachedEvent and Juju has taken care of the rest.
+        """
+        self._stored.local_storage_attached = True
+        if self._stored.nextcloud_initialized:
+            self.unit.status = BlockedStatus("Adding storage after installation is now supported.")
+        else:
+            self.unit.status = MaintenanceStatus("Adding local data storage.")
+            self.install_mount_unitfile()
+
+
+def _on_data_storage_detaching(self, event):
+    """
+    Remove the local storage flag.
+    """
+    self.unit.status = MaintenanceStatus("Removed data storage.")
+    self._stored.local_storage_attached = False
 
 
 if __name__ == "__main__":

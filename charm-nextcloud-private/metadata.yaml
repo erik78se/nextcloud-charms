@@ -20,6 +20,16 @@ requires:
     interface: redis
     optional: true
 
+
+storage:
+  data:
+    type: filesystem
+    description: Nextcloud data directory.
+    minimum-size: 100M
+    location: /nextcloud/data
+    multiple:
+      range: 0-1
+
 resources:
   nextcloud-tarfile:
     type: file
