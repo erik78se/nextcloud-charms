@@ -15,7 +15,7 @@ from ops.main import main
 from ops.framework import StoredState
 from ops.lib import use
 
-from ops.model import ActiveStatus,BlockedStatus,MaintenanceStatus
+from ops.model import ActiveStatus, BlockedStatus, MaintenanceStatus
 
 from nextcloud import utils
 from nextcloud.occ import Occ
