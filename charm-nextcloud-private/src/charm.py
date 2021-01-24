@@ -1,3 +1,7 @@
+#!/usr/bin/env python3
+# Copyright 2020 Erik Lönroth
+# See LICENSE file for licensing details.
+
 import logging
 import shutil
 import subprocess as sp
@@ -11,11 +15,7 @@ from ops.main import main
 from ops.framework import StoredState
 from ops.lib import use
 
-from ops.model import (
-    ActiveStatus,
-    BlockedStatus,
-    MaintenanceStatus
-)
+from ops.model import ActiveStatus,BlockedStatus,MaintenanceStatus
 
 from nextcloud import utils
 from nextcloud.occ import Occ
@@ -246,6 +246,9 @@ class NextcloudPrivateCharm(CharmBase):
         if not self._stored.nextcloud_fetched:
             self.unit.status = BlockedStatus("Nextcloud not fetched.")
 
+        elif not self._stored.database_available:
+            self.unit.status = BlockedStatus("No database available.")
+
         elif not self._stored.nextcloud_initialized:
             self.unit.status = BlockedStatus("Nextcloud not initialized.")
 
@@ -254,9 +257,6 @@ class NextcloudPrivateCharm(CharmBase):
 
         elif not self._stored.php_configured:
             self.unit.status = BlockedStatus("PHP not configured.")
-
-        elif not self._stored.database_available:
-            self.unit.status = BlockedStatus("No database.")
 
         else:
             if self.model.unit.is_leader():
@@ -276,7 +276,7 @@ class NextcloudPrivateCharm(CharmBase):
         Install unitfile for mounting data dir.
         """
         shutil.copyfile('templates/etc/systemd/system/var-www-nextcloud-data.mount',
-                        '/etc/systemd/system/')
+                        '/etc/systemd/system/var-www-nextcloud-data.mount')
         sp.check_call(['systemctl', 'daemon-reload'])
 
     def _on_data_storage_attached(self, event):
