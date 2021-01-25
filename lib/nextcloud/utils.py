@@ -1,5 +1,7 @@
 import subprocess as sp
 import sys
+
+import lsb_release
 import requests
 import tarfile
 from pathlib import Path
@@ -45,7 +47,23 @@ def set_directory_permissions():
 
 def install_dependencies():
     """
-    Install dependencies for running nextcloud.
+    Installs package dependencies for the supported distros.
+    + focal
+    + bionic
+    :return:
+    """
+    if 'focal' == lsb_release.get_distro_information()['CODENAME']:
+        _install_dependencies_focal()
+    elif 'bionic' == lsb_release.get_distro_information()['CODENAME']:
+        _install_dependencies_bionic()
+    else:
+        raise RuntimeError(f"No valid series found to install package dependencies for")
+
+
+def _install_dependencies_bionic():
+    """
+    Install packages that is needed by nextcloud to work with this charm.
+    Inspired by: https://github.com/nextcloud/vm/blob/master/nextcloud_install_production.sh
     """
     try:
         packages = ['apache2',
@@ -71,6 +89,40 @@ def install_dependencies():
         sys.exit(-1)
 
 
+def _install_dependencies_focal():
+    """
+    Install packages that is needed by nextcloud to work with this charm.
+    Inspired by: https://github.com/nextcloud/vm/blob/master/nextcloud_install_production.sh
+    :return:
+    """
+    try:
+        packages = ['apache2',
+                    'libapache2-mod-php7.4',
+                    'php7.4-fpm',
+                    'php7.4-fpm',
+                    'php7.4-intl',
+                    'php7.4-ldap',
+                    'php7.4-imap',
+                    'php7.4-gd',
+                    'php7.4-pgsql',
+                    'php7.4-curl',
+                    'php7.4-xml',
+                    'php7.4-zip',
+                    'php7.4-mbstring',
+                    'php7.4-soap',
+                    'php7.4-json',
+                    'php7.4-gmp',
+                    'php7.4-bz2',
+                    'php7.4-bcmath',
+                    'php-pear']
+        command = ["sudo", "apt", "install", "-y"]
+        command.extend(packages)
+        sp.run(command, check=True)
+    except sp.CalledProcessError as e:
+        print(e)
+        sys.exit(-1)
+
+
 def fetch_and_extract_nextcloud(tarfile_url):
     """
     Fetch and Install nextcloud from internet
@@ -87,6 +139,7 @@ def fetch_and_extract_nextcloud(tarfile_url):
         print(e)
         sys.exit(-1)
 
+
 def extract_nextcloud(tarfile_path):
     """
     Install nextcloud from tarfile
@@ -94,6 +147,7 @@ def extract_nextcloud(tarfile_path):
     dst = Path('/var/www/')
     with tarfile.open(tarfile_path, mode='r:bz2') as tfile:
         tfile.extractall(path=dst)
+
 
 def config_apache2(templates_path, template):
     """
@@ -123,8 +177,12 @@ def config_php(phpmod_context, templates_path, template):
     template = jinja2.Environment(
         loader=jinja2.FileSystemLoader(templates_path)
     ).get_template(template)
-    target = Path('/etc/php/7.2/mods-available/nextcloud.ini')
-    target.write_text(template.render(phpmod_context))
+    target_72 = Path('/etc/php/7.2/mods-available/nextcloud.ini')
+    target_74 = Path('/etc/php/7.4/mods-available/nextcloud.ini')
+    if get_phpversion() == "7.4":
+        target_74.write_text(template.render(phpmod_context))
+    elif get_phpversion() == "7.2":
+        target_72.write_text(template.render(phpmod_context))
     sp.check_call(['phpenmod', 'nextcloud'])
 
 
@@ -134,3 +192,22 @@ def config_redis(redis_info, templates_path, template):
     ).get_template(template)
     target = Path('/var/www/nextcloud/config/redis.config.php')
     target.write_text(template.render(redis_info))
+
+
+def get_phpversion():
+    """
+    Get php version X.Y from the running system.
+    Supports
+    - 7.2 (bionic),
+    - 7.4 (focal)
+
+    :return: string
+    """
+    response = sp.check_output(['php', '-v']).decode()
+    lines = response.split("\n")
+    if "PHP 7.4" in lines[0]:
+        return "7.4"
+    elif "PHP 7.2" in lines[0]:
+        return "7.2"
+    else:
+        raise RuntimeError(f"No valid PHP version found in check")
