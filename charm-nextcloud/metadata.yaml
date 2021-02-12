@@ -20,6 +20,10 @@ requires:
     interface: redis
     optional: true
 
+  shared-fs:
+    interface: mount
+    optional: true
+
 peers:
   cluster:
     interface: nextcloud-cluster
