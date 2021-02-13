@@ -64,7 +64,8 @@ class NextcloudCharm(CharmBase):
             self.on.cluster_relation_changed: self._on_cluster_relation_changed,
             self.on.cluster_relation_joined: self._on_cluster_relation_joined,
             self.on.cluster_relation_departed: self._on_cluster_relation_departed,
-            self.on.cluster_relation_broken: self._on_cluster_relation_broken
+            self.on.cluster_relation_broken: self._on_cluster_relation_broken,
+            self.on.set_trusted_domain_action: self._on_set_trusted_domain_action
         }
 
         # REDIS
@@ -332,6 +333,11 @@ class NextcloudCharm(CharmBase):
     def _on_redis_available(self, event):
         utils.config_redis(self._stored.redis_info,
                            Path(self.charm_dir / 'templates'), 'redis.config.php.j2')
+
+    def _on_set_trusted_domain_action(self, event):
+        domain = event.params['domain']
+        Occ.config_system_set_trusted_domains(domain, 1)
+        self.update_config_php_trusted_domains()
 
 
 if __name__ == "__main__":

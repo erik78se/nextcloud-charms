@@ -57,7 +57,8 @@ class NextcloudPrivateCharm(CharmBase):
             self.db.on.database_relation_joined: self._on_database_relation_joined,
             self.db.on.master_changed: self._on_master_changed,
             self.on.update_status: self._on_update_status,
-            self.on.data_storage_attached: self._on_data_storage_attached
+            self.on.data_storage_attached: self._on_data_storage_attached,
+            self.on.set_trusted_domain_action: self._on_set_trusted_domain_action
         }
 
         # REDIS
@@ -298,13 +299,16 @@ class NextcloudPrivateCharm(CharmBase):
             self.unit.status = MaintenanceStatus("Adding local data storage.")
             self.install_mount_unitfile()
 
+    def _on_set_trusted_domain_action(self, event):
+        domain = event.params['domain']
+        Occ.config_system_set_trusted_domains(domain, 1)
 
-def _on_data_storage_detaching(self, event):
-    """
-    Remove the local storage flag.
-    """
-    self.unit.status = MaintenanceStatus("Removed data storage.")
-    self._stored.local_storage_attached = False
+    def _on_data_storage_detaching(self, event):
+        """
+        Remove the local storage flag.
+        """
+        self.unit.status = MaintenanceStatus("Removed data storage.")
+        self._stored.local_storage_attached = False
 
 
 if __name__ == "__main__":

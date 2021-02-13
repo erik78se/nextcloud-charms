@@ -4,16 +4,13 @@
 # This is only an example, and you should edit to suit your needs.
 # If you don't need actions, you can remove the file entirely.
 # It ties in to the example _on_fortune_action handler in src/charm.py
-add-trusted-domain:
-  description: 'Adds a trusted domain by invoking <occ config:system:set trusted_domain>.'
+set-trusted-domain:
+  description: 'Set the trusted domain by invoking <occ config:system:set trusted_domain>.'
   params:
-    index:
-      description: 'nextcloud trusted_domains array'
-      type: integer
     domain:
-      decription: 'The domain --value=<example.com>'
+      decription: 'Domain name to set as trusted. E.g. domain=example.com.'
       type: string
-  required: [ index, domain ]
+  required: [ domain ]
 
 add-missing-indices:
   description: 'Runs occ db:add-missing-indices'
