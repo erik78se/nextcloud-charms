@@ -293,7 +293,7 @@ class NextcloudPrivateCharm(CharmBase):
         """
         self._stored.local_storage_attached = True
         if self._stored.nextcloud_initialized:
-            self.unit.status = BlockedStatus("Adding storage after installation is now supported.")
+            self.unit.status = BlockedStatus("Adding storage after installation is not supported.")
         else:
             self.unit.status = MaintenanceStatus("Adding local data storage.")
             self.install_mount_unitfile()
