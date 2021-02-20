@@ -65,7 +65,8 @@ class NextcloudCharm(CharmBase):
             self.on.cluster_relation_joined: self._on_cluster_relation_joined,
             self.on.cluster_relation_departed: self._on_cluster_relation_departed,
             self.on.cluster_relation_broken: self._on_cluster_relation_broken,
-            self.on.set_trusted_domain_action: self._on_set_trusted_domain_action
+            self.on.set_trusted_domain_action: self._on_set_trusted_domain_action,
+            self.on.shared_fs_relation_changed: self._on_shared_fs_relation_changed
         }
 
         # REDIS
@@ -338,6 +339,34 @@ class NextcloudCharm(CharmBase):
         domain = event.params['domain']
         Occ.config_system_set_trusted_domains(domain, 1)
         self.update_config_php_trusted_domains()
+
+    def _on_shared_fs_relation_changed(self, event):
+        if self._stored.nextcloud_initialized:
+            self.unit.status = BlockedStatus("Adding NFS storage after installation is not supported.")
+            return
+
+        self.unit.status = MaintenanceStatus("Adding NFS storage.")
+        remote_host = event.relation.data[event.unit].get('ingress-address')  # or private-address?
+        export_path = event.relation.data[event.unit].get('mountpoint')
+        mount_options = event.relation.data[event.unit].get('options')
+        fstype = event.relation.data[event.unit].get('fstype')
+
+        try:
+            packages = ['rpcbind', 'nfs-common']
+            cmd = ["sudo", "apt", "install", "-y"]
+            cmd.extend(packages)
+            sp.run(cmd, check=True)
+        except sp.CalledProcessError as e:
+            print(e)
+            sys.exit(-1)
+
+        local_data_dir = '/var/www/nextcloud/data'
+        if not os.path.exists(local_data_dir):
+            os.mkdir(local_data_dir)
+        cmd = "mount -t {} -o {} {}:{} {}".format(fstype, mount_options, remote_host, export_path, local_data_dir)
+        sp.run(cmd.split())
+
+        utils.set_directory_permissions()
 
 
 if __name__ == "__main__":
