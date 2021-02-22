@@ -24,6 +24,10 @@ requires:
     interface: mount
     optional: true
 
+  ceph:
+    interface: ceph
+    optional: true
+
 peers:
   cluster:
     interface: nextcloud-cluster
