@@ -1,0 +1,20 @@
+# Copyright 2021 joakimnyman
+# See LICENSE file for licensing details.
+name: sub-ceph-mon
+description: |
+  TODO: fill out the charm's description
+subordinate: true
+summary: |
+  TODO: fill out the charm's summary
+series: [bionic]
+
+requires:
+  juju-info:
+    interface: juju-info
+    scope: container
+  rados-gw:
+    interface: http
+
+provides:
+  ceph:
+    interface: ceph

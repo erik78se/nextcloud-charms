@@ -8,6 +8,7 @@ import sys
 import os
 import socket
 from pathlib import Path
+import json
 
 from ops.charm import CharmBase
 from ops.main import main
@@ -35,6 +36,7 @@ pgsql = use("pgsql", 1, "postgresql-charmers@lists.launchpad.net")
 
 NEXTCLOUD_ROOT = os.path.abspath('/var/www/nextcloud')
 NEXTCLOUD_CONFIG_PHP = os.path.abspath('/var/www/nextcloud/config/config.php')
+NEXTCLOUD_CEPH_CONFIG_PHP = os.path.join(NEXTCLOUD_ROOT, 'config/ceph.config.php')
 
 
 class NextcloudCharm(CharmBase):
@@ -50,7 +52,8 @@ class NextcloudCharm(CharmBase):
                                  nextcloud_initialized=False,
                                  database_available=False,
                                  apache_configured=False,
-                                 php_configured=False)
+                                 php_configured=False,
+                                 ceph_configured=False)
         self._stored.set_default(db_conn_str=None, db_uri=None, db_ro_uris=[])
 
         event_bindings = {
@@ -66,7 +69,8 @@ class NextcloudCharm(CharmBase):
             self.on.cluster_relation_departed: self._on_cluster_relation_departed,
             self.on.cluster_relation_broken: self._on_cluster_relation_broken,
             self.on.set_trusted_domain_action: self._on_set_trusted_domain_action,
-            self.on.shared_fs_relation_changed: self._on_shared_fs_relation_changed
+            self.on.shared_fs_relation_changed: self._on_shared_fs_relation_changed,
+            self.on.ceph_relation_changed: self._on_ceph_relation_changed
         }
 
         # REDIS
@@ -147,6 +151,14 @@ class NextcloudCharm(CharmBase):
             nextcloud_config = f.read()
             cluster_rel.data[self.app]['nextcloud_config'] = str(nextcloud_config)
 
+    def update_relation_ceph_config_php(self):
+        if not os.path.exists(NEXTCLOUD_CEPH_CONFIG_PHP):
+            return
+        cluster_rel = self.model.relations['cluster'][0]
+        with open(NEXTCLOUD_CEPH_CONFIG_PHP) as f:
+            ceph_config = f.read()
+            cluster_rel.data[self.app]['ceph_config'] = str(ceph_config)
+
     def _on_cluster_relation_joined(self, event):
         if self.model.unit.is_leader():
             if not self._stored.nextcloud_initialized:
@@ -160,7 +172,7 @@ class NextcloudCharm(CharmBase):
             if 'nextcloud_config' not in event.relation.data[self.app]:
                 event.defer()
                 return
-            nextcloud_config = nextcloud_config = event.relation.data[self.app]['nextcloud_config']
+            nextcloud_config = event.relation.data[self.app]['nextcloud_config']
             with open(NEXTCLOUD_CONFIG_PHP, "w") as f:
                 f.write(nextcloud_config)
             data_dir_path = os.path.join(NEXTCLOUD_ROOT, 'data')
@@ -172,6 +184,11 @@ class NextcloudCharm(CharmBase):
             utils.set_directory_permissions()
             self._stored.database_available = True
             self._stored.nextcloud_initialized = True
+            # Broadcast ceph config to peers
+            if 'ceph_config' in event.relation.data[self.app]:
+                ceph_config = event.relation.data[self.app]['ceph_config']
+                with open(NEXTCLOUD_CEPH_CONFIG_PHP, "w") as f:
+                    f.write(ceph_config)
 
     def _on_cluster_relation_departed(self, event):
         self.framework.breakpoint('departed')
@@ -367,6 +384,27 @@ class NextcloudCharm(CharmBase):
         sp.run(cmd.split())
 
         utils.set_directory_permissions()
+
+    def _on_ceph_relation_changed(self, event):
+        if not self.model.unit.is_leader():
+            return
+        ceph_user = event.relation.data[event.app].get('ceph_user')
+        rados_gw_hostname = event.relation.data[event.app].get('rados_gw_hostname')
+        rados_gw_port = event.relation.data[event.app].get('rados_gw_port')
+        if ceph_user and rados_gw_hostname and rados_gw_port:
+            self.framework.breakpoint('ceph-changed')
+            ceph_user = json.loads(ceph_user)
+            self.unit.status = MaintenanceStatus("Begin config ceph.")
+            ceph_info = {
+                'ceph_key': ceph_user['keys'][0]['access_key'],
+                'ceph_secret': ceph_user['keys'][0]['secret_key'],
+                'rados_gw_hostname': rados_gw_hostname,
+                'rados_gw_port': rados_gw_port
+            }
+            utils.config_ceph(ceph_info, Path(self.charm_dir / 'templates'), 'ceph.config.php.j2')
+            self._stored.ceph_configured = True
+            self.unit.status = MaintenanceStatus("ceph config complete.")
+            self.update_relation_ceph_config_php()
 
 
 if __name__ == "__main__":

@@ -193,6 +193,17 @@ def config_redis(redis_info, templates_path, template):
     target = Path('/var/www/nextcloud/config/redis.config.php')
     target.write_text(template.render(redis_info))
 
+def config_ceph(ceph_info, templates_path, template):
+    """
+    Renders the phpmodule for nextcloud (nextcloud.ini)
+    This is instead of manipulating the system wide php.ini
+    which might be overwitten or changed from elsewhere.
+    """
+    template = jinja2.Environment(
+        loader=jinja2.FileSystemLoader(templates_path)
+    ).get_template(template)
+    target = Path('/var/www/nextcloud/config/ceph.config.php')
+    target.write_text(template.render(ceph_info))
 
 def get_phpversion():
     """
