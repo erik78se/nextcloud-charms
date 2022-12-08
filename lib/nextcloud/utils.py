@@ -134,7 +134,29 @@ def fetch_and_extract_nextcloud(tarfile_url):
         response = requests.get(tarfile_url, allow_redirects=True, stream=True)
         dst = Path('/var/www/')
         with tarfile.open(fileobj=io.BytesIO(response.content), mode='r:bz2') as tfile:
-            tfile.extractall(path=dst)
+            
+            import os
+            
+            def is_within_directory(directory, target):
+                
+                abs_directory = os.path.abspath(directory)
+                abs_target = os.path.abspath(target)
+            
+                prefix = os.path.commonprefix([abs_directory, abs_target])
+                
+                return prefix == abs_directory
+            
+            def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+            
+                for member in tar.getmembers():
+                    member_path = os.path.join(path, member.name)
+                    if not is_within_directory(path, member_path):
+                        raise Exception("Attempted Path Traversal in Tar File")
+            
+                tar.extractall(path, members, numeric_owner=numeric_owner) 
+                
+            
+            safe_extract(tfile, path=dst)
     except sp.CalledProcessError as e:
         print(e)
         sys.exit(-1)
@@ -146,7 +168,26 @@ def extract_nextcloud(tarfile_path):
     """
     dst = Path('/var/www/')
     with tarfile.open(tarfile_path, mode='r:bz2') as tfile:
-        tfile.extractall(path=dst)
+        def is_within_directory(directory, target):
+            
+            abs_directory = os.path.abspath(directory)
+            abs_target = os.path.abspath(target)
+        
+            prefix = os.path.commonprefix([abs_directory, abs_target])
+            
+            return prefix == abs_directory
+        
+        def safe_extract(tar, path=".", members=None, *, numeric_owner=False):
+        
+            for member in tar.getmembers():
+                member_path = os.path.join(path, member.name)
+                if not is_within_directory(path, member_path):
+                    raise Exception("Attempted Path Traversal in Tar File")
+        
+            tar.extractall(path, members, numeric_owner=numeric_owner) 
+            
+        
+        safe_extract(tfile, path=dst)
 
 
 def config_apache2(templates_path, template):
